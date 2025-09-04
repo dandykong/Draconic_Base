@@ -1,0 +1,24 @@
+"VertexLitGeneric"
+{
+	$basetexture	"models\vuthakral\black-100"
+	$bumpmap	"models\vuthakral\flatnormal-50"
+
+	$phong	1
+	$phongboost	1
+	$phongexponent	1
+	$phongfresnelranges	"[ 1 1 1 ]"
+
+	$envmapfallback	"models\vuthakral\defaultcubemap"
+	$cmtint_fb	"[ 1 1 1 ]"
+	$cmpower_fb	1
+
+	$slotnum	35
+	$drc_camocolour	""
+	
+	Proxies
+	{
+		drc_WeaponCamo{}
+		drc_ReflectionTint{}
+		drc_ScalingRimLight{}
+	}
+}

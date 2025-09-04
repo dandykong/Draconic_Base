@@ -116,7 +116,8 @@ end
 function DRC:GetPlayerModelInfo(model)
 	local tab = nil
 	if model == nil then return DRC.Playermodels["-drcdefault"] end
-	if model != nil then tab = DRC.Playermodels[player_manager.TranslateToPlayerModelName(model)] end
+--	if model != nil then tab = DRC.Playermodels[player_manager.TranslateToPlayerModelName(model)] end
+	tab = DRC.Playermodels[player_manager.TranslateToPlayerModelName(model)]
 	if tab then return tab else return DRC.Playermodels["-drcdefault"] end
 end
 
@@ -435,12 +436,12 @@ DRC.HelperEnts = {
 	["predicted_viewmodel"] = "viewmodel",
 	["viewmodel"] = "viewmodel",
 	["target_cdaudio"] = "cdaudio", -- HOLY SHIT THIS IS STILL IN THE ENGINE?????
+	["npc_enemyfinder"] = "npc_enemyfinder",
 	["drc_ptex_base"] = "drc_ptex_base",
 	["drc_csshadowmodel"] = "drc_csshadowmodel",
 	["drc_csweaponshadow"] = "drc_csweaponshadow",
 	["drc_csplayermodel"] = "drc_csplayermodel",
 	["drc_shieldmodel"] = "drc_shieldmodel",
-	["npc_enemyfinder"] = "npc_enemyfinder",
 }
 
 DRC.HoldTypes = {
@@ -1052,6 +1053,23 @@ function DRC:LerpColor(fraction, mini, maxi)
 	return col
 end
 
+function DRC:AdaptiveLerp(frac, mini, maxi)
+	local from, to = mini, maxi
+	if mini > maxi then from = maxi to = mini end
+	
+	return Lerp(frac, from, to)
+end
+
+function DRC:UnLerp(point, v1, v2)
+	local mini = math.min(v1, v2)
+	local maxi = math.max(v1, v2)
+
+	local frac = (point - mini) / (maxi - mini)
+	frac = math.Clamp(frac, 0, 1)
+	return frac
+end
+
+
 function DRC:GetColours(ent, rgb)
 	if !IsValid(ent) then return end
 	local coltab = {}
@@ -1097,7 +1115,7 @@ end
 
 function DRC:UpdatePlayerColours(ply)
 	if not IsValid(ply) then return end
-	if ply != ply then return end
+--	if ply != ply then return end 
 	
 	local t1c = Vector(127, 127, 127)
 	local t2c = Vector(127, 127, 127)
@@ -1139,7 +1157,7 @@ function DRC:UpdatePlayerColours(ply)
 	wpc.y = math.Clamp(wpc.y, 0.032, 1)
 	wpc.z = math.Clamp(wpc.z, 0.032, 1)
 	
-	grunge = ply:GetInfoNum("cl_drc_playergrunge", 0, 0, 100)
+	grunge = math.Clamp(ply:GetInfoNum("cl_drc_playergrunge", 0), 0, 100)
 	
 	ply:SetNWVector( "PlayerColour_DRC", plc)
 	ply:SetNWVector( "WeaponColour_DRC", wpc)
@@ -1183,7 +1201,7 @@ function DRC:UpdatePlayerColours(ply)
 	
 	return
 end
-concommand.Add("drc_refreshcolours", DRC:UpdatePlayerColours())
+concommand.Add("drc_refreshcolours", function(ply) DRC:UpdatePlayerColours(ply) end)
 
 function DRC:RefreshColours(ply)
 	DRC:UpdatePlayerColours(ply)
@@ -1243,6 +1261,21 @@ function DRC:SetNWVar(ent, key, val)
 	end
 end
 
+function DRC:SetAggressiveCull(ent, b)
+	ent:SetNWBool("DRC_AggresivelyCulled", b)
+	
+	if SERVER then
+		net.Start("DRC_SyncAggCull")
+		net.WriteEntity(ent)
+		net.WriteBool(b)
+		net.Broadcast()
+	else
+		if b == true then DRC.AggressiveCulls[ent] = ent else DRC.AggressiveCulls[ent] = nil end
+		if b == false then ent:SetNoDraw(b) end
+	end
+	
+	if b == false then ent:SetNoDraw(b) end
+end
 
 function DRC:AddText(ply, varargs)
 	net.Start("DRCNetworkedAddText")
@@ -1254,7 +1287,6 @@ function DRC:EmitSound(source, near, far, distance, hint, listener)
 	if !source then return end
 	if near == nil && far == nil then return end
 	if near == "" && far == "" then return end
---	if far == nil && near != nil then source:EmitSound(near) return end
 	
 	if isvector(source) && near then
 		sound.Play(near, source)
@@ -1285,17 +1317,17 @@ function DRC:Interact(ply, ent, movement, mouse)
 	if IsValid(ent) then ply:SetNWEntity("Interacted_Entity", ent) end
 	if movement == nil then movement = false end
 	if mouse == nil then mouse = false end
-	ply:SetNWBool("Interacting", true)
-	ply:SetNWBool("Interacting_StopMovement", movement)
-	ply:SetNWBool("Interacting_StopMouse", mouse)
-	ply:SetNWAngle("Interacting_EyeAngle", ply:EyeAngles())
+	ply:SetNWBool("DRC_Interacting", true)
+	ply:SetNWBool("DRC_Interacting_StopMovement", movement)
+	ply:SetNWBool("DRC_Interacting_StopMouse", mouse)
+	ply:SetNWAngle("DRC_Interacting_EyeAngle", ply:EyeAngles())
 end
 
 function DRC:BreakInteraction(ply, ent)
 	if IsValid(ent) then ply:SetNWEntity("Interacted_Entity", nil) end
-	ply:SetNWBool("Interacting", false)
-	ply:SetNWBool("Interacting_StopMovement", false)
-	ply:SetNWBool("Interacting_StopMouse", false)
+	ply:SetNWBool("DRC_Interacting", false)
+	ply:SetNWBool("DRC_Interacting_StopMovement", false)
+	ply:SetNWBool("DRC_Interacting_StopMouse", false)
 end
 
 
@@ -1700,25 +1732,40 @@ net.Receive("DRC_RequestSprayInfo", function()
 	end
 end)
 
-hook.Add("PlayerInitialSpawn", "drc_InitialSpawnHook", function(ply)
+local keypresses = {
+	[IN_FORWARD] = "N",
+	[IN_BACK] = "S",
+	[IN_MOVERIGHT] = "E",
+	[IN_MOVELEFT] = "W",
+	[IN_WALK] = "Walk",
+	[IN_SPEED] = "Sprint",
+}
+
+hook.Add("PlayerInitialSpawn", "DRC_InitialSpawnHook", function(ply)
 	ply.SprayIndexed = false
 	ply.DRCSprayFrames = 1
-	net.Start("DRC_RequestSprayInfo")
-	net.Broadcast()
 	
-	net.Start("DRC_MapVersion")
-	
-	local bsp = file.Open( "maps/" .. game.GetMap() .. ".bsp", "rb", "GAME" )
-	bsp:Seek(4)
-	local ver = bsp:ReadByte()
-	bsp:Close()
-	-- game.GetMapVersion() seems to be broken at the time of writing this
-	
-	local info = { ply, ver }
-	net.WriteTable(info)
-	net.Send(ply)
+	ply.DRC_Info_Cache = {}
+	for k,v in pairs(keypresses) do
+		ply.DRC_Info_Cache[v] = false
+	end
 	
 	timer.Simple(0, function()
+		net.Start("DRC_RequestSprayInfo")
+		net.Broadcast()
+		
+		net.Start("DRC_MapVersion")
+		
+		local bsp = file.Open( "maps/" .. game.GetMap() .. ".bsp", "rb", "GAME" )
+		bsp:Seek(4)
+		local ver = bsp:ReadByte()
+		bsp:Close()
+		-- game.GetMapVersion() seems to be broken at the time of writing this
+		
+		local info = { ply, ver }
+		net.WriteTable(info)
+		net.Send(ply)
+	
 		if !file.Exists("draconic", "DATA") then file.CreateDir("draconic") end
 		local ftu = file.Read("draconic/reflectionmodifiers.json", "DATA")
 		if ftu then
@@ -1734,12 +1781,12 @@ end)
 hook.Add("PlayerSpawn", "drc_DoPlayerSettings", function(ply, transition)
 	DRC:RefreshColours(ply)
 	ply.DRCAttachmentInventory = {}
-	ply:SetNWBool("Interacting", false)
+	ply:SetNWBool("DRC_Interacting", false)
 	ply:SetNWString("Draconic_ThirdpersonForce", nil)
-	ply:SetNWBool("ShowSpray_Ents", ply:GetInfoNum("cl_drc_showspray", 0))
-	ply:SetNWBool("ShowSpray_Weapons", ply:GetInfoNum("cl_drc_showspray_weapons", 0))
-	ply:SetNWBool("ShowSpray_Vehicles", ply:GetInfoNum("cl_drc_showspray_vehicles", 0))
-	ply:SetNWBool("ShowSpray_Player", ply:GetInfoNum("cl_drc_showspray_player", 0))
+	ply:SetNWBool("ShowSpray_Ents", ply:GetInfoNum("cl_drc_showspray", 0) == 1)
+	ply:SetNWBool("ShowSpray_Weapons", ply:GetInfoNum("cl_drc_showspray_weapons", 0) == 1)
+	ply:SetNWBool("ShowSpray_Vehicles", ply:GetInfoNum("cl_drc_showspray_vehicles", 0) == 1)
+	ply:SetNWBool("ShowSpray_Player", ply:GetInfoNum("cl_drc_showspray_player", 0) == 1)
 	ply:SetNWInt("DRC_GunSpreadMod", 1)
 	ply:SetNWInt("DRC_GunDamageMod", 1)
 	ply:SetNWInt("DRC_MeleeDamageMod", 1)
@@ -1748,6 +1795,8 @@ hook.Add("PlayerSpawn", "drc_DoPlayerSettings", function(ply, transition)
 	ply:SetNWFloat("DRC_VoiceSetDSP", 0)
 	ply:SetNWInt("DRCVoiceSet_Enforced", "None")
 	ply:SetNWInt("DRCFootsteps_Enforced", "None")
+	ply:SetNWFloat("DRC_PlayerCamoScale", ply:GetInfoNum("cl_playercamo_scale", 1))
+	ply:SetNWString("DRC_StickerOverride", ply:GetInfo("cl_playersticker", 1))
 	
 	DRC:SetVoiceSet(ply, ply:GetInfo("cl_drc_voiceset") or "None", false)
 	DRC:SetFootsteps(ply, ply:GetInfo("cl_drc_footstepset") or "None", false)
@@ -1790,9 +1839,9 @@ end)
 
 hook.Add("StartCommand", "drc_InteractionBlocks", function(ply, cmd)
 	if ply:Alive() then 
-		local bool1 = ply:GetNWBool("Interacting")
-		local bool2 = ply:GetNWBool("Interacting_StopMovement")
-		local bool3 = ply:GetNWBool("Interacting_StopMouse")
+		local bool1 = ply:GetNWBool("DRC_Interacting")
+		local bool2 = ply:GetNWBool("DRC_Interacting_StopMovement")
+		local bool3 = ply:GetNWBool("DRC_Interacting_StopMouse")
 		local ent = ply:GetNWEntity("Interacted_Entity", ply)
 		
 		if bool1 then
@@ -1817,7 +1866,7 @@ hook.Add("StartCommand", "drc_InteractionBlocks", function(ply, cmd)
 			if cmd:KeyDown(IN_BACK) then cmd:RemoveKey(IN_BACK) end
 		end
 		if bool3 then
-			ply:SetEyeAngles(ply:GetNWAngle("Interacting_EyeAngle"))
+			ply:SetEyeAngles(ply:GetNWAngle("DRC_Interacting_EyeAngle"))
 		end
 	end
 end)
@@ -1841,18 +1890,24 @@ hook.Add("DoPlayerDeath", "drc_PlayerDeathEvents", function(ply, attacker, dmg)
 	end)
 	
 	local wpn = ply:GetActiveWeapon()
-	if !IsValid(wpn) then return end
-	if wpn.Draconic == nil then return end
-	
-	if wpn.PickupOnly == true && wpn.DoNotDrop != true then ply:DropWeapon(wpn) end
-	
-	if wpn.ChargeSound == nil then return end
-	if wpn.Primary.LoopingFireSound == nil then return end
-	if wpn.LoopFireSound == nil then return end
-	
-	wpn:StopSound(wpn.ChargeSound)
-	wpn:StopSound(wpn.Primary.LoopingFireSound)
-	wpn.LoopFireSound:Stop()
+	if IsValid(wpn) && wpn.Draconic != nil then	
+		if wpn.PickupOnly == true && wpn.DoNotDrop != true then ply:DropWeapon(wpn) end
+		
+		if wpn.ChargeSound == nil then return end
+		if wpn.Primary.LoopingFireSound == nil then return end
+		if wpn.LoopFireSound == nil then return end
+		
+		wpn:StopSound(wpn.ChargeSound)
+		wpn:StopSound(wpn.Primary.LoopingFireSound)
+		wpn.LoopFireSound:Stop()
+	end
+end)
+
+hook.Add("OnPlayerHitGround", "drc_WeaponFPLandingAnimations", function(ply, inWater, onFloater, speed)
+	local wpn = ply:GetActiveWeapon()
+	if IsValid(wpn) && wpn.Draconic != nil then
+		wpn:PlayAnim(ACT_LAND, false, true)
+	end
 end)
 
 hook.Add("PlayerSwitchWeapon", "drc_stfu2", function(ply, ow, nw)
@@ -1910,6 +1965,7 @@ hook.Add("CreateClientsideRagdoll", "drc_playerragdollcolours", function(ply, ra
 	if ply:IsPlayer() && ply:GetInfo("cl_playercamo") != "nil" then
 		DRC:RefreshCamoMats(rag)
 		DRC:SetCamo(rag, ply:GetInfo("cl_playercamo"), "automatic")
+		rag:SetNWFloat("DRC_PlayerCamoScale", ply:GetInfoNum("cl_playercamo_scale", 1))
 	end
 end)
 
@@ -1928,6 +1984,7 @@ hook.Add("CreateEntityRagdoll", "drc_playerragdollcolours", function(ply, rag)
 	if ply:IsPlayer() && ply:GetInfo("cl_playercamo") != "nil" then
 		DRC:RefreshCamoMats(rag)
 		DRC:SetCamo(rag, ply:GetInfo("cl_playercamo"), "automatic")
+		rag:SetNWFloat("DRC_PlayerCamoScale", ply:GetInfoNum("cl_playercamo_scale", 1))
 	end
 end)
 
@@ -2006,18 +2063,19 @@ hook.Add("PlayerTick", "drc_movementhook", function(ply)
 end)
 
 function DRC:GetVelocityPose(ent, mul, doset)
-	-- hours wasted here: 11
+	-- hours wasted here: 14
+	-- only for the solution to be stupidly simple.
+
+	local vel = ent:GetVelocity()*0.00000001
 	
-	if ent:IsPlayer() then ent = ent:GetActiveWeapon() end
-	
-	local velang = DRC:GetVelocityAngle(ent, false, false, false)
-	local vel = ent:GetVelocity()/100000000
-    local velDir = vel:GetNormal()
-	
-	local tr = DRC:TraceDir(ent:GetPos() + ent:OBBCenter(), velang, 0.64 * vel)
-	local trn = tr.Normal
-	
-	local x, y, z = math.Clamp((ent:GetForward():Dot(velDir)), -1, 1), math.Clamp((ent:GetRight():Dot(velDir)), -1, 1), math.Clamp((ent:GetUp():Dot(velDir)), -1, 1)
+	local yaw = ent:EyeAngles().yaw
+	local flatAng = Angle(0, yaw, 0)
+	local flatForward = flatAng:Forward()
+	local flatRight = flatAng:Right()
+
+	local velDir = vel:GetNormalized()
+
+	local x, y, z = math.Clamp(flatForward:Dot(velDir), -1, 1), math.Clamp(flatRight:Dot(velDir), -1, 1), math.Clamp(ent:GetUp():Dot(velDir), -1, 1)
 	
 	if doset == true then
 		ent:SetPoseParameter("move_x", x)
@@ -2026,43 +2084,6 @@ function DRC:GetVelocityPose(ent, mul, doset)
 	end
 	
 	return x, y, z
-	--[[
-	local velang = DRC:GetVelocityAngle(ent, false, false, false)
-	if vel == Vector() or length == 0 then velang = Angle() end
-	
-	local speed
-	local walk, duck = false, false
-	if ent:IsPlayer() then
-		walk = ent:KeyDown(IN_WALK)
-		duck = ent:KeyDown(IN_DUCK)
-		mspd = ent:GetRunSpeed() - (ent:GetRunSpeed() * 0.25)
-		if walk then mspd = ent:GetSlowWalkSpeed() * 3.75 end
-		if duck then mspd = mspd * 1.5 end
-	end
-	
-	speed = Lerp(length * 0.0000064, 0, mspd) * 2.64 -- hammer unit funny moment
-	local tick = 1/engine.TickInterval()
-	local tr = DRC:TraceDir(ent:GetPos() + ent:OBBCenter(), velang, 0.64 * tick * speed)
-	if tr then DRC:RenderTrace(tr, Color(255, 0, 0, 255), FrameTime()) end
-	local p1, p2 = ent:GetPos() + ent:OBBCenter(), tr.HitPos
-	local diff = Vector(p1.x - p2.x, p1.y - p2.y, p1.z - p2.z) * 0.064
-	
-	local EntY = math.abs(ent:EyeAngles().y)/180
-	local diffrotator = Lerp(EntY, -1, 1)
-	local mul = 1.5
-	if walk then mul = 3 end
-	
-	ent.DRCVelocityPoseX = Lerp(0.01, ent.DRCVelocityPoseX or diff.x, diff.x) * -diffrotator
-	ent.DRCVelocityPoseY = Lerp(0.01, ent.DRCVelocityPoseY or diff.y, diff.y) * -diffrotator
-	
-	local percx = (diff.x * vel.x) * 0.064
-	local percy = (diff.y * vel.y) * 0.064
-	
-	local lx, ly = ent.DRCVelocityPoseX * percx, ent.DRCVelocityPoseY * percy
-	
-	return lx, -ly
-	]]
-	
 end
 
 hook.Add("UpdateAnimation", "DRC_MoveBlendWithoutRootMotion", function(ply, vel, msgs)
@@ -2373,7 +2394,7 @@ function DRC:GetHGMul(ent, hg, dinfo)
 	elseif hg == HITGROUP_RIGHTARM then enum = "HITGROUP_RIGHTARM"
 	elseif hg == HITGROUP_LEFTLEG then enum = "HITGROUP_LEFTLEG"
 	elseif hg == HITGROUP_RIGHTLEG then enum = "HITGROUP_RIGHTLEG"
-	elseif hg == HITGROUP_GEAR then enum = "HITGROUP_GEAR"end
+	elseif hg == HITGROUP_GEAR then enum = "HITGROUP_GEAR" end
 	
 	local BaseProfile = scripted_ents.GetStored("drc_abp_generic")
 	local BT = infl.ActiveAttachments.AmmunitionTypes.t.BulletTable
@@ -2737,6 +2758,7 @@ if SERVER then
 					ed:SetStart(ent:GetPos() + ent:OBBCenter())
 					ed:SetEntity(ent)
 					util.Effect(ent:GetNWString("DRC_Shield_RechargeEffect"), ed)
+					DRC:SpeakSentence(ent, "Reactions", "Shield_Recharging", true)
 				end
 			end)
 		else
@@ -2772,7 +2794,8 @@ function DRC:PopShield(ent)
 	if ent.DoCustomShieldBreak then tgt:DoCustomShieldBreak(dmg) end
 	ent:SetNWInt("DRC_ShieldHealth", 0)
 	ent:SetNWInt("DRC_ShieldHealth_Extra", 0)
---	ent:TakeDamage(0)
+	
+	DRC:SpeakSentence(ent, "Reactions", "Shield_Down", true)
 end
 
 function DRC:GetShield(ent)
@@ -3029,17 +3052,24 @@ hook.Add("EntityEmitSound", "DRC_Footsteps_Wade", function(tbl)
 	end
 end)
 
+local function landingsound(ply, fs)
+	ply:StopSound("player/pl_fallpain1.wav")
+	ply:StopSound("player/pl_fallpain3.wav")
+	local ss, so, vol, om = SelectFootstep(ply, false, fs, false, false, true)
+	if ss then ply:EmitSound(ss, vol) end
+end
+
 hook.Add("OnPlayerHitGround", "DRC_Footsteps_Landing", function(ply, water, floater, speed)
 	if CLIENT or game.SinglePlayer() then
 	local fs = DRC:GetFootsteps(ply)
 	if fs then
 		local n,s,e,w = IN_FORWARD, IN_BACK, IN_MOVERIGHT, IN_MOVELEFT
 		local inp = ply:KeyDown(n) or ply:KeyDown(s) or ply:KeyDown(e) or ply:KeyDown(w)
-		if !inp then 
-			ply:StopSound("player/pl_fallpain1.wav")
-			ply:StopSound("player/pl_fallpain3.wav")
-			local ss, so, vol, om = SelectFootstep(ply, false, fs, false, false, true)
-			if ss then ply:EmitSound(ss, vol) end
+		local beh = fs.LandingBehaviour or 0
+		if beh == 0 && !inp then
+			landingsound(ply, fs)
+		elseif beh == 1 then 
+			landingsound(ply, fs)
 		end
 	end
 	end
@@ -3267,6 +3297,8 @@ function DRC:DamageSentence(ent, damage, dmg)
 	local infl = dmg:GetInflictor()
 	local victim = ent
 	
+	local shp, mshp = DRC:GetShield(ent)
+	
 	local function PostComplaint(dam, condition, attackerisnpc)
 		local str, thyme = "Minor_Post", math.Rand(1, 3)
 		
@@ -3360,13 +3392,16 @@ function DRC:DamageSentence(ent, damage, dmg)
 		return end
 
 		if percentage >= 0.2 then
-			DRC:SpeakSentence(ent, "Pain", "Major", true, math.Rand(60, 120))
+			if shp && shp > 0 then DRC:SpeakSentence(ent, "Pain", "Major_Shielded", true, math.Rand(60, 120))
+			else DRC:SpeakSentence(ent, "Pain", "Major", true, math.Rand(60, 120)) end
 			PostComplaint(percentage, conditionstring, npc)
 		elseif percentage < 0.2 && percentage >= 0.1 then
-			DRC:SpeakSentence(ent, "Pain", "Medium", true, math.Rand(60, 120))
+			if shp && shp > 0 then DRC:SpeakSentence(ent, "Pain", "Medium_Shielded", true, math.Rand(60, 120))
+			else DRC:SpeakSentence(ent, "Pain", "Medium", true, math.Rand(60, 120)) end
 			PostComplaint(percentage, conditionstring, npc)
 		elseif percentage < 0.1 then
-			DRC:SpeakSentence(ent, "Pain", "Minor", true, math.Rand(60, 120))
+			if shp && shp > 0 then DRC:SpeakSentence(ent, "Pain", "Minor_Shielded", true, math.Rand(60, 120))
+			else DRC:SpeakSentence(ent, "Pain", "Minor", true, math.Rand(60, 120)) end
 			PostComplaint(percentage, conditionstring, npc)
 		end
 	end
@@ -3896,6 +3931,7 @@ function DRC:RefreshCamoMats(ply, nuke)
 	for k,v in pairs(mats) do
 		local id = table.KeyFromValue(emats, v)
 		ply.CamoSubMaterials[id] = v
+		if !ply.CamoSubMaterials[id] then print(v, "is not a valid material on", ply:GetModel()) end
 		ply.CamoProxyMaterials[id] = Material(v)
 	end
 	
@@ -3926,9 +3962,10 @@ function DRC:SetCamo(ply, mat, name)
 end
 
 if !DRC.WeaponSkins then DRC.WeaponSkins = {} end
-function DRC:RegisterWeaponSkin(name, desc, mat, icon, isproxy, importtype)
+function DRC:RegisterWeaponSkin(name, desc, mat, icon, isproxy, category, importtype)
 	if !importtype then importtype = "Draconic" end
 	if !isproxy then isproxy = false end
+	if !category then category = "Uncategorized" end
 	local str
 	if !isproxy then str = "materials/".. mat ..".vmt" end
 	if !isproxy && !file.Exists(str, "GAME") then return end
@@ -3936,7 +3973,7 @@ function DRC:RegisterWeaponSkin(name, desc, mat, icon, isproxy, importtype)
 	local ntu
 	if isproxy == false then ntu = mat else ntu = mat.UniqueName end
 	
-	DRC.WeaponSkins[ntu] = {["name"] = name, ["desc"] = desc, ["icon"] = icon or nil, ["proxy"] = isproxy, ["type"] = importtype}
+	DRC.WeaponSkins[ntu] = {["name"] = name, ["desc"] = desc, ["icon"] = icon or nil, ["proxy"] = isproxy, ["category"] = category, ["type"] = importtype}
 	if isproxy then DRC.WeaponSkins[ntu]["ProxyMat"] = mat end
 	
 	table.SortByMember(DRC.WeaponSkins, "name")
@@ -4314,16 +4351,23 @@ if SERVER then
 end
 
 local OldScreenshake = util.ScreenShake -- Intercepting screenshake so that it can be emulated in custom CalcView hooks.
+
+if !DRC.DisableHardScreenshake then DRC.DisableHardScreenshake = false end -- Set to true whenever you need this to happen, just be sure to set it back to false when you're done.
 function util.ScreenShake(pos, amp, freq, dur, radi, inair)
 	if SERVER then
 		for k,v in pairs(ents.FindInSphere(pos, radi)) do
 			if v:IsPlayer() then
 				local tab = {pos, amp, freq, dur, radi}
-			--	local str = "".. tostring(pos) .."(-)".. amp .."(-)".. freq .."(-)".. dur .."(-)".. radi ..""
+				local str = "".. tostring(pos) .."(-)".. amp .."(-)".. freq .."(-)".. dur .."(-)".. radi ..""
+			--	print(str)
 				if tab then DRC:NetworkScreenShake(v, tab) end
 			end
 		end
+	else
+		DRC:FakeScreenShake(pos, amp, freq, dur, radi)
 	end
+	
+	if DRC.DisableHardScreenshake == true then return function() end end
 	
 	return OldScreenshake(pos, amp, freq, dur, radi, inair)
 end

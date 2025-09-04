@@ -170,7 +170,7 @@ function SWEP:RegeneratingAmmo(wpn, delay, amount)
 			wpn:SetLoadedAmmo(ammo - 1)
 		elseif ammo < wpn:GetMaxClip1() then
 			if CurTime() > wpn:GetNextPrimaryFire() + delay then
-				wpn:SetLoadedAmmo(math.Clamp(ammo + 1, 0, wpn:GetMaxClip1()))
+				wpn:SetLoadedAmmo(math.Clamp(ammo + wpn.RegenAmmo_Amount, 0, wpn:GetMaxClip1()))
 			end
 		end
 	end
@@ -194,49 +194,110 @@ function SWEP:DisperseHeat()
 	end
 end
 
+-- Maximum, decay multiplier, flat bonus, post-multiplier
+SWEP.BloomDefinitions = {
+	["standidle"] 			= {1, 1.5, 0, 1},
+	["crouchidle"] 			= {1, 3.5, 0, 1},
+	["running"] 			= {1.3, 1.25, 0.1, 1},
+	["sprinting"] 			= {1.7, 0.75, 0.3, 1},
+	["swimidle"] 			= {0.9, 1.5, 0, 1},
+	["swimming"] 			= {1.1, 1.5, 0, 1},
+}
+SWEP.BloomDefinitions_ADS = {
+	["standidle"] 			= {1, 2, 0, 0.75},
+	["crouchidle"] 			= {1, 4.5, 0, 0.75},
+	["running"] 			= {1.3, 2, 0.1, 0.85},
+	["sprinting"] 			= {1.7, 2, 0.3, 1},
+	["swimidle"] 			= {0.9, 1.5, 0, 0.75},
+	["swimming"] 			= {1.1, 1.5, 0, 0.75},
+}
+
+local fallbacks = {
+	["crouchrunning"] = "running",
+	["crouchsprinting"] = "sprinting",
+}
+
 function SWEP:BloomScore()
 	if self.Base != "draconic_melee_base" then
 		local ply = self:GetOwner()
 		if !IsValid(ply) then return end
-		local cv = ply:Crouching()
-		local sk = ply:KeyDown(IN_SPEED)
-		local mk = (ply:KeyDown(IN_MOVELEFT) or ply:KeyDown(IN_MOVERIGHT) or ply:KeyDown(IN_FORWARD) or ply:KeyDown(IN_BACK))
-		local plidle = (!mk && !sk && !cv)
-		local issprinting = sk && mk
-		local sd = self.SightsDown
-
-		self.BloomScoreName = "BloomScore_".. ply:Name()
 		
-		timer.Create(self.BloomScoreName, (60 / self.Primary.RPM) * 3, 0, function() 
+		self.BloomScoreName = "DRC_BloomScore_".. ply:Name()
+		timer.Create(self.BloomScoreName, (60 / self.Primary.RPM) * 3, 0, function()
 			if !self:IsValid() then return end
 			if self.BloomValue == 0 then return end
 			
-			local div, maxi, mul, bonus = 1, 1.7, 1, 0	
-			if !sd then
-				if plidle then maxi = 1 mul = 1.5
-				elseif cv then maxi = 1 mul = 1.75
-				elseif mk then maxi = 1.3 mul = 2 bonus = 0.1
-				elseif issprinting then maxi = 1.7 mul = 2 bonus = 0.3 end
-			else
-				if plidle then maxi = 1 mul = 2 div = 1.5
-				elseif cv then maxi = 1 mul = 2 div = 3
-				elseif mk then maxi = 1 mul = 1 bonus = 0.1 div = 2
-				elseif issprinting then maxi = 1 mul = 1 bonus = 0.3 div = 2 end
-			end
+			local maxi, decay, bonus, mul
+			local mode = "standidle"
+			mode = self.OwnerActivity
+			
+			local ttu = self.BloomDefinitions
+			if self.SightsDown then ttu = self.BloomDefinitions_ADS end
+			
+			if !ttu[mode] and fallbacks[mode] then mode = fallbacks[mode] end
+			maxi, decay, bonus, mul = ttu[mode][1], ttu[mode][2], ttu[mode][3], ttu[mode][4]
 			
 			local bs = self.BloomValue
 			local pbs = self.PrevBS
-			if self.SightsDown == false then
-				self.PrevBS = math.Clamp( bs, 0, 1.7)
-				self.BloomValue = math.Clamp( bs - (self.Primary.Kick * mul + bonus), 0, maxi)
-			else
-				self.PrevBS = math.Clamp( bs, 0, 1.7)
-				self.BloomValue = math.Clamp( bs - (self.Primary.Kick * mul + bonus / div), 0, maxi)
-			end
+			self.PrevBS = math.Clamp(bs, 0, 1.7)
+			self.BloomValue = math.Clamp(bs - ((self.Primary.Kick * decay + bonus)), 0, maxi)
 		end)
-		
-	repeat until timer.Exists(self.BloomScoreName)
+		repeat until timer.Exists(self.BloomScoreName)
 	end
+end
+
+function SWEP:UpdateBloom(mode)
+	local ply = self:GetOwner()
+	local oa, cv, bs, pbs, mul, sd = self.OwnerActivity, ply:Crouching(), self:GetBS(), self:GetPBS(), 1, self.SightsDown
+	
+	local kickmodes = {
+		["primary"] = self.PrimaryStats.Kick,
+		["secondary"] = self.SecondaryStats.Kick,
+		["overcharge"] = self.OCStats.Kick
+	}
+	
+	local blooms = {
+		["primary"] = self.PrimaryStats.BloomMul,
+		["secondary"] = self.SecondaryStats.BloomMul,
+		["overcharge"] = self.OCStats.BloomMul
+	}
+	
+	local bloomscrouch = {
+		["primary"] = self.PrimaryStats.BloomMulCrouch,
+		["secondary"] = self.SecondaryStats.BloomMulCrouch,
+		["overcharge"] = self.OCStats.BloomMulCrouch
+	}
+	
+	local bloomsads = {
+		["primary"] = self.PrimaryStats.BloomMulADS,
+		["secondary"] = self.SecondaryStats.BloomMulADS,
+		["overcharge"] = self.OCStats.BloomMulADS
+	}
+	
+	self.Kick = kickmodes[mode]
+	
+	if !cv && !sd then mul = blooms[mode]
+	elseif !cv && sd then mul = blooms[mode] * bloomsads[mode]
+	elseif cv && !sd then mul = bloomscrouch[mode]
+	elseif cv && sd then mul = bloomscrouch[mode] * bloomsads[mode] end
+	
+	local mode = "standidle"
+	mode = oa
+	local ttu = self.BloomDefinitions
+	if sd then ttu = self.BloomDefinitions_ADS end
+	if !ttu[mode] and fallbacks[mode] then mode = fallbacks[mode] end
+	local maxi, bonus, globalmul = ttu[mode][1], ttu[mode][3], ttu[mode][4]
+	
+	self.PrevBS = math.Clamp(bs, 0, 1.7)
+	self.BloomValue = math.Clamp((self.BloomValue + bonus + self.Kick) * mul * globalmul, 0, maxi)
+end
+
+function SWEP:GetBS()
+	return self.BloomValue
+end
+
+function SWEP:GetPBS()
+	return self.PrevBS
 end
 
 function SWEP:DisperseCharge()
@@ -282,52 +343,7 @@ function SWEP:CanOvercharge()
 	if self:GetCharge() > 99 then return true else return false end
 end
 
-function SWEP:UpdateBloom(mode)
-	local ply = self:GetOwner()
-	local oa, cv, bs, pbs, mul, sd = self.OwnerActivity, ply:Crouching(), self:GetBS(), self:GetPBS(), 1, self.SightsDown
-	
-	local kickmodes = {
-		["primary"] = self.PrimaryStats.Kick,
-		["secondary"] = self.SecondaryStats.Kick,
-		["overcharge"] = self.OCStats.Kick
-	}
-	
-	local blooms = {
-		["primary"] = self.PrimaryStats.BloomMul,
-		["secondary"] = self.SecondaryStats.BloomMul,
-		["overcharge"] = self.OCStats.BloomMul
-	}
-	
-	local bloomscrouch = {
-		["primary"] = self.PrimaryStats.BloomMulCrouch,
-		["secondary"] = self.SecondaryStats.BloomMulCrouch,
-		["overcharge"] = self.OCStats.BloomMulCrouch
-	}
-	
-	local bloomsads = {
-		["primary"] = self.PrimaryStats.BloomMulADS,
-		["secondary"] = self.SecondaryStats.BloomMulADS,
-		["overcharge"] = self.OCStats.BloomMulADS
-	}
-	
-	self.Kick = kickmodes[mode]
-	
-	if !cv && !sd then mul = blooms[mode]
-	elseif !cv && sd then mul = blooms[mode] * bloomsads[mode]
-	elseif cv && !sd then mul = bloomscrouch[mode]
-	elseif cv && sd then mul = bloomscrouch[mode] * bloomsads[mode] end
-	
-	self.PrevBS = math.Clamp(bs, 0, DRCD.Weapons.bloom_maximums[oa])
-	self.BloomValue = math.Clamp((self.BloomValue + DRCD.Weapons.bloom_updates[oa] + self.Kick) * mul, 0, DRCD.Weapons.bloom_maximums[oa])
-end
 
-function SWEP:GetBS()
-	return self.BloomValue
-end
-
-function SWEP:GetPBS()
-	return self.PrevBS
-end
 
 function SWEP:DoMeleeSwing(swinginfo, preventanim)
 	if !self:CanMelee() then return false end
@@ -373,8 +389,10 @@ function SWEP:DoMeleeSwing(swinginfo, preventanim)
 	end
 
 	if IsFirstTimePredicted() then self:EmitSound(swinginfo.sound or "") end
-	self:SetNextPrimaryFire(ct + swinginfo.delay[2])
-	self:SetNextSecondaryFire(ct + swinginfo.delay[2])
+	local del = ct + swinginfo.delay[2]
+	self:SetNextPrimaryFire(del)
+	self:SetNextSecondaryFire(del)
+	self.EffectGracePeriod = del + 0.5
 	
 	if swinginfo.lunge && swinginfo.lunge[1] == true then
 		local target = self:GetConeTarget()
@@ -754,7 +772,7 @@ function SWEP:DoShoot(mode)
 	local trace = util.TraceLine( tr )
 	local LeftHand = ply:LookupBone(DRC.Skel.LeftHand.Name)
 	local RightHand = ply:GetAttachment(ply:LookupAttachment("righthand"))
-	if RightHand == nil then 
+	if RightHand == nil then
 		RightHand = ply:GetAttachment(ply:LookupAttachment("anim_attach_RH"))
 		if RightHand != nil then RightHand = RightHand.Bone
 		else RightHand = ply:LookupBone("ValveBiped.Bip01_R_Hand") end
@@ -976,9 +994,9 @@ function SWEP:DoShoot(mode)
 		end)
 	else
 		if SERVER then
-			local Valve = DRC:ValveBipedCheck(ply)
-			local ptu
-			if Valve then ptu = ply:GetBonePosition(RightHand) else eyeheight = ply:EyePos().z - ply:GetPos().z ptu = ply:GetPos() + Vector(0, 0, eyeheight/1.1) + ply:EyeAngles():Forward() * 10 + ply:EyeAngles():Right() * 5 end
+			--local Valve = DRC:ValveBipedCheck(ply)
+			local ptu = ply:GetBonePosition(RightHand)
+			--if Valve then ptu = ply:GetBonePosition(RightHand) else eyeheight = ply:EyePos().z - ply:GetPos().z ptu = ply:GetPos() + Vector(0, 0, eyeheight/1.1) + ply:EyeAngles():Forward() * 10 + ply:EyeAngles():Right() * 5 end
 			
 			for i=1,shotnum do
 				local class = ""
@@ -1228,7 +1246,7 @@ function SWEP:DoEffects(mode, nosound, multishot)
 	end
 	
 	if CLIENT && !game.SinglePlayer() && self.Sound then
-		self:EmitSound(self.Sound)
+		EmitSound(self.Sound, self:GetPos(), ply:EntIndex())
 	end
 	
 	-- Distant sounds have to be networked because their origin doesn't actually exist on the client when outside the PVS
@@ -1296,7 +1314,7 @@ function SWEP:DoRecoil(mode)
 	
 	if CLIENT then
 		ply:SetEyeAngles(Angle(0, 0, 0) + Angle(eyeang.pitch, eyeang.yaw, nil))
-		if ply == LocalPlayer() then
+		if game.SinglePlayer() && ply == LocalPlayer() then
 			local ss = {
 				[0] = self.Primary.Screenshake,
 				[1] = self.Secondary.Screenshake,

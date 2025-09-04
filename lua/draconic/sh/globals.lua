@@ -27,26 +27,6 @@ DRCD.Weapons = {
 		["camera"] = {"draconic.IronInGeneric", "draconic.IronOutGeneric"},
 		["magic"] = {"draconic.IronInGeneric", "draconic.IronOutGeneric"},
 	},
-	["bloom_updates"] = {
-		["standidle"] = 0,
-		["crouchidle"] = 0,
-		["running"] = 0.1,
-		["crouchrunning"] = 0.1,
-		["sprinting"] = 0.3,
-		["crouchingsprinting"] = 0.3,
-		["swimidle"] = 0,
-		["swimming"] = 0.1,
-	},
-	["bloom_maximums"] = {
-		["standidle"] = 1,
-		["crouchidle"] = 1,
-		["running"] = 1.3,
-		["crouchrunning"] = 1.3,
-		["sprinting"] = 1.7,
-		["crouchingsprinting"] = 1.7,
-		["swimidle"] = 0.9,
-		["swimming"] = 1.1,
-	}
 }
 
 
@@ -157,6 +137,8 @@ if CLIENT then
 	if GetConVar("cl_playerhands_bodygroups") == nil then CreateConVar("cl_playerhands_bodygroups", "", {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "c_arms for the player to use, if the server allows for customization of this.") end
 	if GetConVar("cl_playerhands_skin") == nil then CreateConVar("cl_playerhands_skin", "", {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "c_arms for the player to use, if the server allows for customization of this.") end
 	if GetConVar("cl_playercamo") == nil then CreateConVar("cl_playercamo", "nil", {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Camo to use on playermodel.") end
+	if GetConVar("cl_playercamo_scale") == nil then CreateConVar("cl_playercamo_scale", 1, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Camo texture scale on your playermodel. (For proxy camos only)") end
+	if GetConVar("cl_playersticker") == nil then CreateConVar("cl_playersticker", "nil", {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Spray/Sticker selection for use of display on supported content.") end
 	if GetConVar("cl_drc_debugmode") == nil then CreateConVar("cl_drc_debugmode", 0, {FCVAR_USERINFO}, "Enables / Disables debug mode of the Draconic Base. (Requires sv_drc_allowdebug.)", 0, 2) end
 	if GetConVar("cl_drc_debug_invertnearfar") == nil then CreateConVar("cl_drc_debug_invertnearfar", 0, {FCVAR_USERINFO}, "Inverts the near/far sound effect code.", 0, 1) end
 	if GetConVar("cl_drc_debug_vmattachments") == nil then CreateConVar("cl_drc_debug_vmattachments", 0, {FCVAR_USERINFO, FCVAR_ARCHIVE}, "Show/hide the viewmodel attachment visualizations.", 0, 1) end
@@ -257,4 +239,87 @@ if CLIENT then
 	if GetConVar("r_fogstart") == nil then CreateConVar("r_fogstart", 0, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Convar added by the Draconic Base for serverside to be able to get fog information about the current map.") end
 	if GetConVar("r_fogend") == nil then CreateConVar("r_fogend", 10000, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Convar added by the Draconic Base for serverside to be able to get fog information about the current map.") end
 	if GetConVar("r_fogdensity") == nil then CreateConVar("r_fogdensity", 0.9, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Convar added by the Draconic Base for serverside to be able to get fog information about the current map.") end
+
+	if GetConVar("cl_drc_perf_aggressiveculling_weapons") == nil then CreateConVar("cl_drc_perf_aggressiveculling_weapons", 1, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Default 1. Enable or disable 'aggressive culling' for Draconic SWEPs.\nVery distant weapons will not render, weapons up close will check for world obstruction. Weapons very close behave normally. Can save performance on poorly optimized maps.") end
+	if GetConVar("cl_drc_perf_aggressiveculling_players") == nil then CreateConVar("cl_drc_perf_aggressiveculling_players", 0, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Default 1. Enable or disable 'aggressive culling' for players.") end
+	if GetConVar("cl_drc_perf_aggressiveculling_misc") == nil then CreateConVar("cl_drc_perf_aggressiveculling_misc", 1, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Default 1. Enable or disable 'aggressive culling' for anything added hastily (i.e. the aggressive culler toolgun).") end
+	if GetConVar("cl_drc_perf_aggressiveculling_mindist") == nil then CreateConVar("cl_drc_perf_aggressiveculling_mindist", 1, {FCVAR_USERINFO, FCVAR_ARCHIVE, FCVAR_DEMO}, "Default 1. Multiply the minimum distance for aggressive culling to enable.") end
+end
+
+
+
+
+-- ### Hooks
+
+local keypresses = {
+	[IN_FORWARD] = "N",
+	[IN_BACK] = "S",
+	[IN_MOVERIGHT] = "E",
+	[IN_MOVELEFT] = "W",
+	[IN_WALK] = "Walk",
+	[IN_SPEED] = "Sprint",
+	[IN_USE] = "Use",
+}
+hook.Add("KeyPress", "DRC_Input_Cache_In", function(ply, key)
+	if keypresses[key] then ply.DRC_Info_Cache[keypresses[key]] = true end
+end)
+hook.Add("KeyRelease", "DRC_Input_Cache_Out", function(ply, key)
+	if keypresses[key] then ply.DRC_Info_Cache[keypresses[key]] = false end
+end)
+hook.Add("Think", "DRC_Input_Cache_Think", function()
+	local plys = player.GetAll()
+	for k,v in pairs(plys) do
+		if !v.DRC_Info_Cache then v.DRC_Info_Cache = {} end
+		local tbl = v.DRC_Info_Cache
+		
+		tbl.EyePos = v:EyePos()
+		tbl.EyeAng = v:EyeAngles()
+		tbl.WaterLevel = v:WaterLevel()
+		tbl.Velocity = v:GetVelocity()
+		tbl.Crouching = v:Crouching()
+	end
+end)
+
+function DRC:GetPlayerInfo(ply, realtime)
+	if !ply:IsPlayer() then return end
+	if !ply.DRC_Info_Cache or ply.DRC_Info_Cache == nil then return end
+	if !realtime or realtime == false then
+		local tbl = ply.DRC_Info_Cache
+		local nw, ne, sw, se = tbl.N && tbl.W, tbl.N && tbl.E, tbl.S && tbl.W, tbl.S && tbl.E
+		local cardinal, ordinal = (tbl.N or tbl.S or tbl.E or tbl.W), (nw or ne or sw or se)
+		local moving = tbl.Velocity:LengthSqr() > 0
+		local running = moving && (cardinal or ordinal)
+		local sprinting = tbl.Sprint && running
+		local walking = !sprinting && tbl.Walk && running
+		
+		local newtbl = {
+			["moving"] = moving,
+			["running"] = running,
+			["sprinting"] = sprinting,
+			["walking"] = walking,
+			["waterlevel"] = tbl.WaterLevel,
+			["crouching"] = tbl.Crouching,
+		}
+		
+		return newtbl
+	else
+		local n, s, e, w = ply:KeyDown(IN_FORWARD), ply:KeyDown(IN_BACK), ply:KeyDown(IN_MOVERIGHT), ply:KeyDown(IN_MOVELEFT)
+		local nw, sw, ne, se = n&&w, s&&w, n&&e, s&&e
+		local cardinal, ordinal = (n or s or e or w), (nw or sw or ne or se)
+		local moving = ply:GetVelocity():LengthSqr() > 0 && (cardinal or ordinal)
+		local running = moving && (cardinal or ordinal)
+		local sprinting = ply:KeyDown(IN_SPEED) && running
+		local walking = !sprinting && ply:KeyDown(IN_WALK) && running
+	
+		local newtbl = {
+			["moving"] = moving,
+			["running"] = running,
+			["sprinting"] = sprinting,
+			["walking"] = walking,
+			["waterlevel"] = ply:WaterLevel(),
+			["crouching"] = ply:Crouching(),
+		}
+		
+		return newtbl
+	end
 end

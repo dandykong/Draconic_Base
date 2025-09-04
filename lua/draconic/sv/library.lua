@@ -211,9 +211,7 @@ net.Receive("DRC_ApplyPlayermodel", function(len, ply)
 	
 	local ent = tbl.player
 	if !IsValid(ent) or !IsValid(ply) then return end
-	if ply != ent then
-		DRC:CheaterWarning(ply, "This client attempted to call the 'DRC_ApplyPlayermodel' net message with a target other than their own player, this is normally completely impossible & only achievable through using an exploited client and/or injected scripts.")
-	return end
+	if ply != ent then DRC:CheaterWarning(ply, "This client attempted to call the 'DRC_ApplyPlayermodel' net message with a target other than their own player, this is normally completely impossible & only achievable through using an exploited client and/or injected scripts.") return end
 	local skin = tbl.skin
 	local bgs = tbl.bodygroups
 	local colours = tbl.colours
@@ -222,6 +220,8 @@ net.Receive("DRC_ApplyPlayermodel", function(len, ply)
 	local fs = tbl.footsteps
 	local hands = tbl.hands
 	local camo = tbl.camo
+	local camoscale = tbl.camoscale
+	local sticker = tbl.sticker
 	
 	if !util.IsValidModel(model) then return end
 	local pname = player_manager.TranslateToPlayerModelName(model)
@@ -238,10 +238,19 @@ net.Receive("DRC_ApplyPlayermodel", function(len, ply)
 	ent:SetNWString("DRCVoiceSet", vs)
 	ent:SetNWString("DRCFootsteps", fs)
 	ent:SetNWString("DRC_SpawnModel", model)
+	ent:SetNWFloat("DRC_PlayerCamoScale", camoscale)
+	ent:SetNWString("DRC_StickerOverride", sticker)
+	
+	ent:SetNWBool("ShowSpray_Ents", ent:GetInfoNum("cl_drc_showspray", 0) == 1)
+	ent:SetNWBool("ShowSpray_Weapons", ent:GetInfoNum("cl_drc_showspray_weapons", 0) == 1)
+	ent:SetNWBool("ShowSpray_Vehicles", ent:GetInfoNum("cl_drc_showspray_vehicles", 0) == 1)
+	ent:SetNWBool("ShowSpray_Player", ent:GetInfoNum("cl_drc_showspray_player", 0) == 1)
 	
 	DRC:SetCamo(ent, camo, "automatic")
 	if !camo then ent:ConCommand("cl_playercamo nil")
 	else ent:ConCommand("cl_playercamo ".. camo .."") end
+	ent:ConCommand("cl_playercamo_scale ".. camoscale .."")
+	ent:ConCommand("cl_playersticker ".. sticker .."")
 	
 	net.Start("DRC_UpdatePlayermodel")
 	net.WriteTable(tbl)
@@ -286,6 +295,7 @@ util.AddNetworkString("DRC_WeaponAttachForceOpen")
 util.AddNetworkString("DRC_WeaponAttachSyncInventory")
 util.AddNetworkString("DRC_ReflectionModifier")
 util.AddNetworkString("DRC_SyncServerVar")
+util.AddNetworkString("DRC_SyncAggCull")
 
 hook.Add("EntityRemoved", "drc_KillShieldTimer", function(ent)
 	if !ent.DRCShield_UID then return end
@@ -665,16 +675,24 @@ hook.Add("PlayerLeaveVehicle", "VoiceSets_ExitVehicle", function(ply, vehicle, r
 end)
 
 hook.Add("PostEntityTakeDamage", "VoiceSets_PostKill", function(tgt, dmg, b)
-	if DRC:IsCharacter(tgt) && DRC:IsCharacter(dmg:GetAttacker()) then
+	local att, infl = dmg:GetAttacker(), dmg:GetInflictor()
+
+	if DRC:IsCharacter(tgt) && DRC:IsCharacter(att) then
+		local veh, veh2 = DRC:IsVehicle(infl), att:IsPlayer() && att:GetVehicle()
 		local class = tgt:GetClass()
 		local str = "kill_".. class ..""
 		local hp = DRC:Health(tgt)
 		if hp <= 0 then
-			local att = dmg:GetAttacker()
 			local vs = DRC:GetVoiceSet(dmg:GetAttacker())
-			if !DRC:IsVSentenceValid(vs, "Reactions", str) then
+			if veh2 && dmg:GetDamageType() == DMG_VEHICLE then
+				if DRC:IsVSentenceValid(vs, "Reactions", "kill_Splatter") && (veh2 && veh == veh2) then
+					timer.Simple(math.Rand(0.5,1), function() DRC:SpeakSentence(att, "Reactions", "kill_Splatter") end)
+				else
+					timer.Simple(math.Rand(0.5,1), function() DRC:SpeakSentence(att, "Reactions", "kill_postgeneric") end)
+				end
+			elseif !DRC:IsVSentenceValid(vs, "Reactions", str) then
 				timer.Simple(math.Rand(0.5,1), function() DRC:SpeakSentence(att, "Reactions", "kill_postgeneric") end)
-			else
+			else	
 				timer.Simple(math.Rand(0.5,1), function() DRC:SpeakSentence(att, "Reactions", str) end)
 			end
 			
@@ -713,14 +731,23 @@ hook.Add("PlayerTick", "DRC_VoiceSetsBreathing", function(ply)
 			local swimming = ply:WaterLevel() == 3
 			local settings = DRC.VoiceSets[vs].Breathing
 			local moving = n or s or e or w
+			local hp = ply:Health() / ply:GetMaxHealth()
 			
 			local delay
 			if !moving && !swimming && !sprinting && !cv then
 				delay = settings.Delay_Idle or 1
-				if ply.NextVSBreath == 0 && DRC:IsVSentenceValid(vs, "Breathing", "In_Idle") then
-					ply.NextVSBreathTime = ct + delay ply.NextVSBreath = 1 DRC:SpeakSentence(ply, "Breathing", "In_Idle")
-				elseif ply.NextVSBreath == 1 && DRC:IsVSentenceValid(vs, "Breathing", "Out_Idle") then
-					ply.NextVSBreathTime = ct + delay ply.NextVSBreath = 0 DRC:SpeakSentence(ply, "Breathing", "Out_Idle")
+				if hp < 0.1 && DRC:IsVSentenceValid(vs, "Breathing", "In_Pained") then
+					if ply.NextVSBreath == 0 then
+						ply.NextVSBreathTime = ct + delay ply.NextVSBreath = 1 DRC:SpeakSentence(ply, "Breathing", "In_Pained")
+					elseif ply.NextVSBreath == 1 && DRC:IsVSentenceValid(vs, "Breathing", "Out_Pained") then
+						ply.NextVSBreathTime = ct + delay ply.NextVSBreath = 0 DRC:SpeakSentence(ply, "Breathing", "Out_Pained")
+					end
+				else
+					if ply.NextVSBreath == 0 && DRC:IsVSentenceValid(vs, "Breathing", "In_Idle") then
+						ply.NextVSBreathTime = ct + delay ply.NextVSBreath = 1 DRC:SpeakSentence(ply, "Breathing", "In_Idle")
+					elseif ply.NextVSBreath == 1 && DRC:IsVSentenceValid(vs, "Breathing", "Out_Idle") then
+						ply.NextVSBreathTime = ct + delay ply.NextVSBreath = 0 DRC:SpeakSentence(ply, "Breathing", "Out_Idle")
+					end
 				end
 			elseif !moving && !swimming && !sprinting && cv then
 				delay = settings.Delay_Crouch or delay
@@ -782,7 +809,8 @@ hook.Add("PlayerSwitchFlashlight", "drc_IntegratedLights", function(ply, b)
 	if IsValid(ply:GetActiveWeapon()) && ply:KeyDown(IN_USE) then
 		local wpn = ply:GetActiveWeapon()
 		if wpn.Draconic && wpn.IntegratedLight_Enabled == true then
-			if wpn:GetActivity() == ACT_VM_IDLE or wpn:GetActivity() == ACT_WALK then
+			local act = wpn:GetActivity()
+			if act != ACT_OBJ_STARTUP then
 				wpn:ToggleIntegratedLight()
 				return false
 			else return false end

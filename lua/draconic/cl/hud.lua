@@ -11,17 +11,68 @@
 
 
 --- ###Helpers
-DRC.HUDAnchors = {
+if !DRC.HUDAnchors then DRC.HUDAnchors = {
 	["TL"] = {x=0, y=0}, ["T"] = {x=ScrW()/2, y=0}, ["TR"] = {x=ScrW(), y=0},
 	["L"] = {x=0, y=ScrH()/2}, ["C"] = {x=ScrW()/2, y=ScrH()/2}, ["R"] = {x=ScrW(), y=ScrH()/2},
 	["BL"] = {x=0, y=ScrH()}, ["B"] = {x=ScrW()/2, y=ScrH()}, ["BR"] = {x=ScrW(), y=ScrH()}
-}
+} end
+
+if !DRC.ToolGunTips then DRC.ToolGunTips = {} end
+
+function DRC:RegisterToolGunTips(tool, primary, secondary, reload)
+	DRC.ToolGunTips[tool] = {primary, secondary, reload}
+end
+
+hook.Add("HUDPaint", "DRC_ToolGun_Helper", function()
+	local ply = DRC.LocalPlayer
+	if !IsValid(ply) or !ply:Alive() then return end
+	local wpn = ply:GetActiveWeapon()
+	if !IsValid(wpn) then return end
+	if wpn:GetClass() != "gmod_tool" then return end
+	local tl = ply:GetTool()
+	if tl then
+		if !DRC.ToolGunTips[tl.Mode] then return end
+		local string1, string2, string3 = "Primary", "Secondary", "Reload"
+		local alpha1, alpha2, alpha3 = 30, 30, 30
+		
+		if tl.PrimaryValid == true then 
+			string1 = DRC.ToolGunTips[tl.Mode][1]
+			alpha1 = 255
+		end
+		if tl.SecondaryValid == true then
+			string2 = DRC.ToolGunTips[tl.Mode][2]
+			alpha2 = 255
+		end
+		if tl.ReloadValid == true then
+			string3 = DRC.ToolGunTips[tl.Mode][3]
+			alpha3 = 255
+		end
+		
+		surface.SetMaterial(Material("gui/lmb.png"))
+		surface.SetDrawColor(Color(255, 255, 255, alpha1))
+		surface.DrawTexturedRectRotated( ScrW() * 0.5 - 146, ScrH() * 0.5, 16, 16, 0 )
+		
+		surface.SetMaterial(Material("gui/rmb.png"))
+		surface.SetDrawColor(Color(255, 255, 255, alpha2))
+		surface.DrawTexturedRectRotated( ScrW() * 0.5 + 146, ScrH() * 0.5, 16, 16, 0 )
+		
+		surface.SetMaterial(Material("gui/r.png"))
+		surface.SetDrawColor(Color(255, 255, 255, alpha3))
+		surface.DrawTexturedRectRotated( ScrW() * 0.5, ScrH() * 0.5 + 100, 16, 16, 0 )
+		
+		draw.SimpleTextOutlined(string1, "Default", ScrW() * 0.5 - 140, ScrH() * 0.5, Color(255, 255, 255, alpha1), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, alpha1))
+		draw.SimpleTextOutlined(string2, "Default", ScrW() * 0.5 + 140, ScrH() * 0.5, Color(255, 255, 255, alpha2), TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, alpha2))
+		draw.SimpleTextOutlined(string3, "Default", ScrW() * 0.5, ScrH() * 0.5 + 80, Color(255, 255, 255, alpha3), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, alpha3))
+	end
+end)
 
 
 
 
 
 --- ###Crosshair
+
+--[[ old and unused but leaving it here in case I need it for something later.
 local basegameweapons = {
 	["weapon_357"] = "E",
 	["weapon_pistol"] = "E",
@@ -55,16 +106,24 @@ local basegameweapons = {
 	["manhack_welder"] = "E",
 	["weapon_medkit"] = "E",
 }
+]]
 
 local function ShouldDrawHLCrosshair()
-	if DRC:ThirdPersonEnabled(LocalPlayer()) == true then return true end
+	if DRC:ThirdPersonEnabled(DRC.LocalPlayer) == true then return true end
 	if GetConVar("cl_drc_experimental_fp"):GetInt() >= 1 then return true end
 	return false
 end
 
 hook.Add("HUDShouldDraw", "DRC_HideBaseCrosshairThirdperson", function(str)
-	local ply = LocalPlayer()
-	if IsValid(ply) && ply:Alive() && IsValid(ply:GetActiveWeapon()) && !IsValid(ply:GetVehicle()) && ShouldDrawHLCrosshair() && str == "CHudCrosshair" then return false end
+	if str == "CHudCrosshair" then
+		local ply = DRC.LocalPlayer
+		if IsValid(ply) && ply:Alive() then
+			local wpn = ply:GetActiveWeapon()
+			local veh = ply:GetVehicle()
+			
+			if IsValid(wpn) && !IsValid(ply:GetVehicle()) && ShouldDrawHLCrosshair() then return false end
+		end
+	end
 end)
 
 local function CrosshairLerp(fraction, from, to)
@@ -84,7 +143,7 @@ local function ShouldDrawCrosshair(ply)
 end
 
 local function drc_Crosshair()
-	local ply = LocalPlayer()
+	local ply = DRC.LocalPlayer
 	if !IsValid(ply) or !ply:Alive() then return end
 	local curswep = ply:GetActiveWeapon()
 	if !IsValid(curswep) then return end
@@ -98,8 +157,8 @@ local function drc_Crosshair()
 	
 	if curswep.SightsDown == false or curswep.Secondary.ScopePitch != 0 then
 	elseif curswep.SightsDown && curswep.Secondary.Scoped == true then
-		pos.x = ScrW()/2
-		pos.y = ScrH()/2
+		pos.x = ScrW()*0.5
+		pos.y = ScrH()*0.5
 		
 		local Xalpha
 		if ((pos.x > ScrW()/2 + 25) or (pos.x < ScrW()/2 - 25)) or ((pos.y > ScrH()/2 + 25) or (pos.y < ScrH()/2 - 25)) then
@@ -371,8 +430,8 @@ hook.Add("HUDPaint", "drc_crosshair", drc_Crosshair)
 --- ###Scope
 local function drc_Scope()
 	if GetConVar("cl_drawhud"):GetFloat() == 0 then return end
-	local ply = LocalPlayer()
-	
+	local ply = DRC.LocalPlayer
+	if !IsValid(ply) or !ply:Alive() then return end
 	if not ply:Alive() then return end
 	local curswep = ply:GetActiveWeapon()
 	if curswep.Draconic == nil then return end
@@ -569,7 +628,8 @@ local function drc_Inspect()
 	if GetConVar("cl_drawhud"):GetFloat() == 0 then return end
 	if DRC.SV.drc_inspect_hideHUD == 1 then return end
 	
-	local ply = LocalPlayer() 
+	local ply = DRC.LocalPlayer 
+	if !IsValid(ply) or !ply.GetActiveWeapon then return end
 	local wpn = ply:GetActiveWeapon()
 	if wpn.Draconic == nil then return end
 	local bool = wpn:GetNWBool("Inspecting", false)
@@ -798,7 +858,8 @@ end)
 local bool, alpha, alphalerp, SwapCD = true, 0, 0, 0
 local function drc_IText()
 	if GetConVar("cl_drawhud"):GetFloat() == 0 then return end
-	local ply = LocalPlayer()
+	local ply = DRC.LocalPlayer
+	if !IsValid(DRC.LocalPlayer) then return end
 	local center = { ScrW()/2, ScrH()/2 }
 	local curswep = ply:GetActiveWeapon()
 	
@@ -872,7 +933,7 @@ hook.Add("PreDrawViewModel", "drc_interact_hidevm", function(vm, ply, wep)
 		if (hide && wpn.AltSightBool != true && wpn.Secondary.Scoped == true) then return true end
 		if (hide && wpn.AltSightBool == true && wpn.Secondary.ScopedAlt == true) then return true end
 	end
-	if ply:GetNWBool("Interacting") == true then return true end
+	if ply:GetNWBool("DRC_Interacting") == true then return true end
 end)
 hook.Add("PostDrawViewModel", "drc_interact_hidevm", function(vm, ply, wep)
 	local wpn = ply:GetActiveWeapon()
@@ -882,11 +943,11 @@ hook.Add("PostDrawViewModel", "drc_interact_hidevm", function(vm, ply, wep)
 		if (hide && wpn.AltSightBool != true && wpn.Secondary.Scoped == true) then return true end
 		if (hide && wpn.AltSightBool == true && wpn.Secondary.ScopedAlt == true) then return true end
 	end
-	if ply:GetNWBool("Interacting") == true then return true end
+	if ply:GetNWBool("DRC_Interacting") == true then return true end
 end)
 hook.Add("PostDrawViewHands", "drc_interact_hidevm", function(vm, ply, wep)
 	if ply:GetActiveWeapon().Draconic == true && ply:GetActiveWeapon().SightsDown == true then return true end
-	if ply:GetNWBool("Interacting") == true then return true end
+	if ply:GetNWBool("DRC_Interacting") == true then return true end
 end)
 
 
@@ -907,7 +968,7 @@ local attachpos = {
 
 function DRC:ToggleAttachmentMenu(wpn, b)
 	if !IsValid(wpn) then return end
-	local ply = LocalPlayer()
+	local ply = DRC.LocalPlayer
 	local theme = DRC.Inspection.Theme
 	local themecolours = DRC.Inspection.Theme.Colours
 	
@@ -1087,7 +1148,7 @@ function DRC:ToggleAttachmentMenu(wpn, b)
 								
 								net.Start("DRC_WeaponAttachSwitch")
 								net.WriteEntity(wpn)
-								net.WriteEntity(LocalPlayer())
+								net.WriteEntity(DRC.LocalPlayer)
 								net.WriteString(att)
 								net.WriteString(slot)
 								net.SendToServer()
@@ -1209,7 +1270,7 @@ function DRC:ToggleAttachmentMenu(wpn, b)
 				selected:SetText(" | ".. name .."")
 				net.Start("DRC_WeaponCamoSwitch")
 				net.WriteEntity(wpn)
-				net.WriteEntity(LocalPlayer())
+				net.WriteEntity(DRC.LocalPlayer)
 				net.WriteString(id)
 				net.WriteString(name)
 				net.SendToServer()
@@ -1396,7 +1457,7 @@ function DRC:ToggleAttachmentMenu(wpn, b)
 			DRC:ToggleAttachmentMenu(wpn, false)
 			net.Start("DRC_WeaponAttachClose")
 			net.WriteEntity(wpn)
-			net.WriteEntity(LocalPlayer())
+			net.WriteEntity(DRC.LocalPlayer)
 			net.SendToServer()
 		end
 		
@@ -1452,10 +1513,10 @@ local function drc_Debug()
 	local chmode = GetConVar("cl_drc_debug_crosshairmode"):GetFloat()
 	local legacy = GetConVar("cl_drc_debug_legacyassistant"):GetFloat()
 
-	local curswep = LocalPlayer():GetActiveWeapon()
+	local curswep = DRC.LocalPlayer:GetActiveWeapon()
 	
 		if debuglevel == "1" or debuglevel == "2" then
-			local ply = LocalPlayer()
+			local ply = DRC.LocalPlayer
 			local curswep = ply:GetActiveWeapon()
 			local staticmat = Material("vgui/replay/replay_camera_crosshair")
 			local dynmat	= Material("sprites/reticle")
@@ -1552,7 +1613,7 @@ local function drc_Debug()
 		if legacy == 1 then
 			if curswep.Draconic != true then
 			else
-			local et = LocalPlayer():GetEyeTrace()
+			local et = DRC.LocalPlayer:GetEyeTrace()
 			local res = et.Entity
 			
 				local header = "DSB Debug Assistant | Current Weapon: ".. curswep.PrintName ..""
@@ -1569,7 +1630,7 @@ local function drc_Debug()
 				if curswep.Base == "draconic_battery_base" then
 					ammoint = "".. curswep.Weapon:GetNWInt("LoadedAmmo") .."%"
 				elseif curswep.Base == "draconic_gun_base" then
-					ammoint = "".. curswep.Weapon:GetNWInt("LoadedAmmo") .." (int) / ".. curswep:Clip1() .." (clip) / ".. LocalPlayer():GetAmmoCount( curswep:GetPrimaryAmmoType() ) .." (reserve)"
+					ammoint = "".. curswep.Weapon:GetNWInt("LoadedAmmo") .." (int) / ".. curswep:Clip1() .." (clip) / ".. DRC.LocalPlayer:GetAmmoCount( curswep:GetPrimaryAmmoType() ) .." (reserve)"
 				else
 					ammoint = "Not a gun."
 				end
@@ -1629,19 +1690,19 @@ local function drc_Debug()
 				end	
 				
 				if curswep.Base == "draconic_melee_base" then
-					if (LocalPlayer():GetPos():Distance(res:GetPos()) < curswep.Primary.Range * 4.1) then
+					if (DRC.LocalPlayer:GetPos():Distance(res:GetPos()) < curswep.Primary.Range * 4.1) then
 						prim = "True"
 					else
 						prim = "False"
 					end
-					if (LocalPlayer():GetPos():Distance(res:GetPos()) < curswep.Secondary.Range * 4.1) then
+					if (DRC.LocalPlayer:GetPos():Distance(res:GetPos()) < curswep.Secondary.Range * 4.1) then
 						sec = "True"
 					else
 						sec = "False"
 					end
 				elseif curswep.Base == "draconic_gun_base" or curswep.Base == "draconic_battery_base" then
 					if curswep.Primary.CanMelee == true then
-						if (LocalPlayer():GetPos():Distance(res:GetPos()) < curswep.Primary.MeleeRange * 4.1) then
+						if (DRC.LocalPlayer:GetPos():Distance(res:GetPos()) < curswep.Primary.MeleeRange * 4.1) then
 							prim = "True"
 						else
 							prim = "False"
@@ -1657,7 +1718,7 @@ local function drc_Debug()
 					if curswep.Primary.CanLunge == false then
 						lunge = "Weapon cannot lunge."
 					else
-						if (LocalPlayer():GetPos():Distance(res:GetPos()) < curswep.Primary.LungeMaxDist) then
+						if (DRC.LocalPlayer:GetPos():Distance(res:GetPos()) < curswep.Primary.LungeMaxDist) then
 							lunge = "True"
 						else
 							lunge = "False"
@@ -1759,7 +1820,7 @@ local function DrawVMAttachments(att, ent)
 	if !att then return end
 	if !IsValid(ent) then return end
 	
-	local wpn = LocalPlayer():GetActiveWeapon()
+	local wpn = DRC.LocalPlayer:GetActiveWeapon()
 	if wpn.Draconic == nil then return end
 	
 	local att2 = ent:LookupAttachment(att)
@@ -1771,9 +1832,9 @@ local function DrawVMAttachments(att, ent)
 	local qs = 3
 	
 	local trace = util.TraceLine({
-		start = LocalPlayer():EyePos(),
-		endpos = LocalPlayer():GetEyeTrace().HitPos,
-		filter = LocalPlayer()
+		start = DRC.LocalPlayer:EyePos(),
+		endpos = DRC.LocalPlayer:GetEyeTrace().HitPos,
+		filter = DRC.LocalPlayer
 	})
 	
 	if att == "muzzle" then
@@ -1812,17 +1873,17 @@ end
 
 --[[
 hook.Add( "PostDrawOpaqueRenderables", "DRC_VisualizeAimAssist", function()
-	if !IsValid(LocalPlayer()) then return end
-	local curswep = LocalPlayer():GetActiveWeapon()
+	if !IsValid(DRC.LocalPlayer) then return end
+	local curswep = DRC.LocalPlayer:GetActiveWeapon()
 	if !curswep.Draconic then return end
 	local mat = Material( "models/shiny" )
 	mat:SetFloat( "$alpha", 0.25 )
 	
-	local dir = LocalPlayer():GetAimVector()
+	local dir = DRC.LocalPlayer:GetAimVector()
 	local angle = math.cos( curswep.SpreadCone ) -- 15 degrees
-	local startPos = LocalPlayer():EyePos()
+	local startPos = DRC.LocalPlayer:EyePos()
 
-	local entities = DRC:EyeCone(LocalPlayer(), 1500, angle)
+	local entities = DRC:EyeCone(DRC.LocalPlayer, 1500, angle)
 
 	-- draw the outer box
 	local mins = Vector( -1500, -1500, -1500 )
@@ -1884,10 +1945,10 @@ hook.Add("PreDrawViewModel", "DrcLerp_Debug", function( vm, ply, wpn )
 end)
 
 hook.Add("Tick", "DRC_PreventBrokenHUD", function()
-	if !IsValid(LocalPlayer()) then return end
-	if !LocalPlayer():Alive() then if DRC.AttachMenu then if DRC.AttachMenu.mpanel then DRC.AttachMenu.mpanel:Remove() end end end
-	if IsValid(LocalPlayer():GetActiveWeapon()) then
-		local wpn = LocalPlayer():GetActiveWeapon()
+	if !IsValid(DRC.LocalPlayer) then return end
+	if !DRC.LocalPlayer:Alive() then if DRC.AttachMenu then if DRC.AttachMenu.mpanel then DRC.AttachMenu.mpanel:Remove() end end end
+	if IsValid(DRC.LocalPlayer:GetActiveWeapon()) then
+		local wpn = DRC.LocalPlayer:GetActiveWeapon()
 		if wpn.Draconic then
 			if DRC.AttachMenu then
 				if DRC.AttachMenu.mpanel && wpn.Customizing != true then DRC.AttachMenu.mpanel:Remove() end

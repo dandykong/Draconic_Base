@@ -19,35 +19,41 @@ if InfMap then
 end
 
 
--- ARC9 Camo reading
+-- ARC9 reading
+DRC.ARC9Stickers = {}
 if ARC9 then
 	for k,v in pairs(ARC9.Attachments) do
 		local tbl = v
-		if tbl.MenuCategory == "ARC9 - Camos" then
-			
-			local name = tbl.ShortName
+		if tbl.CustomCamoTexture then
+			local name = tbl.ShortName or tbl.CompactName or tbl.PrintName
 			if string.sub(name, -4) == ".vtf" then name = string.sub(tbl.ShortName, 0, #tbl.ShortName-4) end
 			name = string.Replace(name, "_", " ")
 			local icon = tbl.Icon or "arc9/arc9_logo.png"
 			
 			local tex = tbl.CustomCamoTexture
 			if tex then
-			if string.sub(tex, -4) == ".vtf" then tex = string.sub(tbl.CustomCamoTexture, 0, #tbl.CustomCamoTexture-4) end
-			
-			local Proxy = {
-				["UniqueName"] = name,
-				["$color2"] = Vector(1,1,1),
-				["$detail"] = tex,
-				["$detailscale"] = 4,
-				["$detailblendfactor"] = 1,
-				["$cmtint"] = Vector(1,1,1),
-				["$cmtint_fb"] = Vector(1,1,1),
-				["$cmpower"] = 1,
-				["$cmpower_fb"] = 1,
-			}
-			
-			DRC:RegisterWeaponSkin(name, tbl.Description, Proxy, icon, true, "ARC9")
+				if string.sub(tex, -4) == ".vtf" then tex = string.sub(tbl.CustomCamoTexture, 0, #tbl.CustomCamoTexture-4) end
+				
+				local Proxy = {
+					["UniqueName"] = name,
+					["$color2"] = Vector(1,1,1),
+					["$detail"] = tex,
+					["$detailscale"] = 4,
+					["$detailblendfactor"] = 1,
+					["$cmtint"] = Vector(1,1,1),
+					["$cmtint_fb"] = Vector(1,1,1),
+					["$cmpower"] = 1,
+					["$cmpower_fb"] = 1,
+				}
+				
+				local folder = tbl.DRCFolder or tbl.Folder or "Unorganized"
+				folder = string.gsub(folder, "/.*", "")
+				
+				DRC:RegisterWeaponSkin(name, tbl.Description, Proxy, icon, true, folder, "ARC9")
 			end
+		end
+		if tbl.StickerMaterial && tbl.ShortName != "sticker_spray" then
+			DRC.ARC9Stickers[tbl.ShortName] = {Material(tbl.StickerMaterial):GetTexture("$basetexture"), tbl.StickerMaterial, tbl.Description or ""}
 		end
 	end
 end

@@ -7,16 +7,20 @@ local bobang = Angle()
 local offsetmul = 1
 
 local desiredpos = Vector()
-local efplerppow
-local offsetlerp
+local efplerppow, offsetlerp
+local shake, shakevert, shakeroll
+local vieworigin
+local plypos
 hook.Add( "CalcView", "DRC_EFP_CalcView", function(ply, origin, ang, fov, zn, zf)
 	if GetConVar("cl_drc_experimental_fp"):GetFloat() == 1 then
 	if EFPChecks() == true then return end
 		if !IsValid(ply) then return end
 		if !ply:Alive() then return end
+		plypos = ply:GetPos()
 		local eyesatt = ply:LookupAttachment("eyes")
 		local eyes = ply:GetAttachment(eyesatt)
 		local pos = eyes.Pos
+		origin = ply.DRC_Info_Cache.EyePos
 		
 		local curswep = ply:GetActiveWeapon()
 		local wpn = curswep
@@ -237,11 +241,15 @@ hook.Add( "CalcView", "DRC_EFP_CalcView", function(ply, origin, ang, fov, zn, zf
 			if base == "mwb" then wep:CalcView(ply, DRC.CalcView.WorldPos, DRC.CalcView.AimCorrectAngle, ply:GetFOV()) end
 			if base == "drc" then view.angles = DRC.CalcView.AimCorrectAngle - drc_vm_lerpang_final / drc_vm_lerpdiv end
 			
-			local shake, shakevert, shakeroll = DRC:GetCalcViewShake()
+			shake, shakevert, shakeroll = DRC:GetCalcViewShake()
+			shake = shake*2
+			shakevert = shakevert*4
+			shakeroll = shakeroll*5
 			view.origin = view.origin + (view.angles:Right() * shake)
 			view.origin = view.origin + (view.angles:Up() * shakevert)
 			view.angles.z = view.angles.z + shakeroll
-				
+			vieworigin = view.origin
+			
 			return view
 		end
 	end
@@ -252,6 +260,8 @@ local specialweapons = {
 	["mwb"] = "cawadoody",
 	["drc"] = "dragons"
 }
+
+local lerpedzpos = 0
 hook.Add( "CalcViewModelView", "DRC_EFP_CalcViewModelView", function(wpn, vm, oldpos, oldang, eyepos, eyeang)
 	if GetConVar("cl_drc_experimental_fp"):GetFloat() == 1 then
 	if EFPChecks() == true then return end
@@ -266,6 +276,8 @@ hook.Add( "CalcViewModelView", "DRC_EFP_CalcViewModelView", function(wpn, vm, ol
 		local sd = DRC:SightsDown(wpn)
 		if !DRC.CalcView.EFP_ISPow then return end
 		
+		local info = ply.DRC_Info_Cache
+		
 		desiredviewpos = Lerp(offsetlerp, desiredviewpos or pos, pos)
 		pos = desiredviewpos
 
@@ -274,15 +286,6 @@ hook.Add( "CalcViewModelView", "DRC_EFP_CalcViewModelView", function(wpn, vm, ol
 		if holdtype == "melee" or holdtype == "melee2" or holdtype == "knife" then
 			newpos = pos - Vector(diff.x * .1, diff.y * .1, diff.z * .1)
 		end
-
-		local aids = et.HitPos
-		local hiv = math.Round(ply:EyePos():Distance(aids))
-		hiv = math.Clamp(hiv, 0, 50) / 50
-		hiv = 1 - hiv
-		ply.drcfp_walllerpval = Lerp(RealFrameTime() * 100, ply.drcfp_walllerpval or hiv, hiv)
-		
-		local fuck = diff * ply:GetModelScale()
-		diff = diff - fuck * 0.333
 		
 		if wpn.Draconic == true && GetConVar("cl_drc_lowered_crosshair"):GetFloat() == 1 then
 			DRC.CrosshairAngMod = Angle(-10, 0, 0)
@@ -305,7 +308,7 @@ hook.Add( "CalcViewModelView", "DRC_EFP_CalcViewModelView", function(wpn, vm, ol
 				eyeang = (DRC.CrosshairAngMod/1.5) + calcvang + DRC.CalcView.LoweredAng
 				newpos = (desiredpos * DRC.CalcView.EFP_ISPow) + calcvpos - (ply:EyePos() * DRC.CalcView.EFP_ISPow) + DRC.CalcView.wallpos
 			elseif base == "drc" then
-				DRCSwepSway(wpn, vm, oldpos, oldang, eyepos, eyeang)
+				DRCSwepSway(wpn, vm, oldpos, oldang, info.EyePos, info.EyeAng)
 				DRCSwepOffset(wpn, vm)
 				calcvpos, calcvang = wpn:GetViewModelPosition(eyepos, eyeang)
 				eyeang = (DRC.CrosshairAngMod/1.5) + calcvang + DRC.CalcView.LoweredAng
@@ -318,7 +321,6 @@ hook.Add( "CalcViewModelView", "DRC_EFP_CalcViewModelView", function(wpn, vm, ol
 			else
 				newpos = desiredpos * DRC.CalcView.EFP_ISPow + DRC.CalcView.wallpos
 			end
-			newpos = Lerp(0.4, newpos or newpos, newpos)
 		end
 		return newpos, eyeang
 	end
@@ -329,17 +331,18 @@ local lerppos
 hook.Add("Think", "DRC_ExpFP_Body", function()
 	if GetConVar("cl_drc_experimental_fp"):GetFloat() == 0 then return end
 	if EFPChecks() == true then return end
+	DRC.DisableHardScreenshake = true
 	local ply = LocalPlayer()
 	if !IsValid(ply) then return end
 	if !ply:Alive() then return end
-	local pos = ply:GetPos()
+	local pos = plypos
 	
 	lerppos = Lerp(RealFrameTime()*20, lerppos or pos, pos)
 
 	if !IsValid(ply:GetVehicle()) then
 		CSPos = Vector(lerppos.x + DRC.CalcView.wallpos.x, lerppos.y + DRC.CalcView.wallpos.y, lerppos.z)
 	else
-		CSPos = Vector(ply:GetPos())
+		CSPos = plypos
 	end
 	
 	if !IsValid(DRC.CSPlayerModel) then

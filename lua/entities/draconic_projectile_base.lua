@@ -75,6 +75,9 @@ ENT.BounceSurfaces = {
 	["wood"] = true,
 }
 
+ENT.HullSize = nil
+ENT.HullMaterial = "default"
+
 ENT.Tracking		= false
 ENT.TrackType		= "Tracking"
 ENT.TrackFraction 	= 0.5
@@ -340,6 +343,7 @@ function ENT:PhysicsUpdate()
 	if !IsValid(self) then return end
 	local phys = self:GetPhysicsObject()
 	local vel = phys:GetVelocity()
+	local vela = vel:Angle()
 	local pos = phys:GetPos()
 	local typ = self.ProjectileType
 	local owner = self:GetOwner()
@@ -347,13 +351,25 @@ function ENT:PhysicsUpdate()
 	local lt = st + 5
 	self.LastPos = pos
 	if self.LastRotVelSet == nil then self.LastRotVelSet = st end
-		
-	if self:WaterLevel() != 0 then return end
+	
+	local wl = self:WaterLevel()
+	
+	if wl == 0 then
+		self.LastForwardAngle = vela
+		self.LastSpeed = (math.abs(vel.x) + math.abs(vel.y) + math.abs(vel.z)) * 0.33
+	end
+	
+	if self.AffectedByWater == false && self.Gravity == false && wl != 0 then
+		phys:SetAngles(self.LastForwardAngle)
+		phys:SetVelocity(phys:GetAngles():Forward() * self.LastSpeed)
+	return end
 	
 	if typ == "magazine" then return end
+	if wl != 0 then return end
+	
 	if CurTime() > st + 0.5 && (vel.x > 50 or vel.y > 50 or vel.z > 50) then 
 		if CurTime() > self.LastRotVelSet then
-			phys:SetAngles(vel:Angle())
+			phys:SetAngles(self.LastForwardAngle)
 			self.LastRotVelSet = CurTime() + engine.TickInterval()
 		end
 		
@@ -465,9 +481,13 @@ function ENT:Initialize()
 
 	self.SpawnTime = CurTime()
 	self:SetModel(self.Model)
-	self:PhysicsInit(SOLID_VPHYSICS)
-	self:SetMoveType(MOVETYPE_VPHYSICS)
-	self:SetSolid(SOLID_VPHYSICS)
+	if self.HullSize != nil then
+		self:PhysicsInitSphere(self.HullSize, self.HullMaterial)
+	else
+		self:PhysicsInit(SOLID_VPHYSICS)
+		self:SetMoveType(MOVETYPE_VPHYSICS)
+		self:SetSolid(SOLID_VPHYSICS)
+	end
 	timer.Simple(0.0000000001, function() if self:IsValid() then self.SpawnVelocity = self:GetVelocity() end end)
 
 	local phys = self:GetPhysicsObject()
@@ -524,6 +544,9 @@ function ENT:Initialize()
 	if self.Gravity == false then
 		phys:EnableGravity(false)
 	else end
+	
+	self.LastSpeed = self.InitialSpeed
+	self.LastForwardAngle = phys:GetAngles()
 
 	if typ == "grenade" or typ == "sticky" or typ == "playersticky" or typ == "supercombine" then
 		timer.Simple(self.FuseTime, function() if self:IsValid() then self:TriggerExplosion() end end)

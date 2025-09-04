@@ -42,5 +42,11 @@ function ENT:Draw()
 	if rt != nil then
 		if rt:GetName():lower() == "_rt_waterreflection" or rt:GetName():lower() == "_rt_shadowdummy" or rt:GetName():lower() == "_rt_camera" then return end
 	end
+	
+	--[[
+	local epos = DRC.CSPlayerModel:GetAttachment(DRC.CSPlayerModel:LookupAttachment("eyes"))
+	local off = epos.Pos - DRC.CSPlayerModel:GetPos()
+	self.Offset = off ]]
+	
 	self:DrawModel()
 end

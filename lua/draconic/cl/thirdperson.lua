@@ -162,7 +162,7 @@ hook.Add("CreateMove", "!drc_cacheusercmd", function(cmd)
 end)
 
 hook.Add("CreateMove", "!drc_thirdpersoncontrol", function(cmd)
-	local ply = LocalPlayer()
+	local ply = DRC.LocalPlayer
 	if !IsValid(ply) then return end
 	if ply:Alive() then
 		local wpn = ply:GetActiveWeapon()
@@ -254,7 +254,7 @@ hook.Add("CreateMove", "!drc_thirdpersoncontrol", function(cmd)
 			end
 			
 			if !DRC:SightsDown(wpn) then
-				if wpn.ASTWTWO then ASTW2Anticlipping(LocalPlayer(), false, false) end
+				if wpn.ASTWTWO then ASTW2Anticlipping(DRC.LocalPlayer, false, false) end
 			end
 		end
 	end
@@ -262,7 +262,7 @@ end)
 
 hook.Add("PrePlayerDraw", "!drc_thirdpersonlook", function(ply)
 	if !IsValid(ply) then return end
-	if ply != LocalPlayer() then return end
+	if ply != DRC.LocalPlayer then return end
 	if GetConVar("cl_drc_thirdperson"):GetInt() == 1 && DRC.CalcView.ThirdPerson.Live == false then
 		local angdiff = Angle(DRC.CalcView.ThirdPerson.Ang.x - ply:EyeAngles().x, DRC.CalcView.ThirdPerson.Ang.y - ply:EyeAngles().y, 0)
 		angdiff:Normalize()
@@ -276,10 +276,10 @@ hook.Add("PrePlayerDraw", "!drc_thirdpersonlook", function(ply)
 end)
 
 hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
-	if !IsValid(ply) then return end
+	if !IsValid(DRC.LocalPlayer) then return end
 	if !ply:Alive() then return end
 	if ply:InVehicle() then return end
-	local wpn = LocalPlayer():GetActiveWeapon()
+	local wpn = DRC.LocalPlayer:GetActiveWeapon()
 	local sd, scoped = DRC:SightsDown(wpn)
 	if !wpn.Draconic && sd then return
 	elseif wpn.Draconic && scoped && sd then return end
@@ -289,13 +289,15 @@ hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
 		local wpn = ply:GetActiveWeapon()
 		if wpn.ASTWTWO && GetConVar("cl_drc_thirdperson"):GetFloat() == 0 then return end
 		local PSMul = ply:GetModelScale()
-		local root = LocalPlayer():LookupBone("ValveBiped.Bip01_Pelvis")
+		local root = DRC.LocalPlayer:LookupBone("ValveBiped.Bip01_Pelvis")
 		local bpos
-		if root != nil then bpos = LocalPlayer():GetBonePosition(root) end
+		if root != nil then bpos = DRC.LocalPlayer:GetBonePosition(root) end
 		local av = ply:GetAimVector()
 		local ea = DRC.CalcView.ThirdPerson.Ang
 		local ep = ply:EyePos()
 		local pos = ply:GetPos()
+		
+		local rft = RealFrameTime()
 		
 		local settings = DRC.ThirdPerson.LerpedSettings
 		local basepoint = math.Round(settings.BasePoint)
@@ -319,24 +321,25 @@ hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
 					local newpos = ply:GetAttachment(attcheck).Pos
 					bpos = newpos
 				else
-					bpos = LocalPlayer():GetPos() + LocalPlayer():OBBCenter()
+					bpos = DRC.LocalPlayer:GetPos() + DRC.LocalPlayer:OBBCenter()
 				end
 			end
 		end
 		
 		if !DRC.ThirdPerson.CamLerp then DRC.ThirdPerson.CamLerp = Vector() end
-		DRC.ThirdPerson.CamLerp.z = Lerp(0.2, DRC.ThirdPerson.CamLerp.z or bpos.z, bpos.z)
-		bpos.z = DRC.ThirdPerson.CamLerp.z
+--		DRC.ThirdPerson.CamLerp.z = Lerp(rft*15, DRC.ThirdPerson.CamLerp.z or bpos.z, bpos.z)
+--		bpos.z = DRC.ThirdPerson.CamLerp.z
 		bpos.x = pos.x
 		bpos.y = pos.y
 		
-	--	bpos = LocalPlayer():GetPos() + LocalPlayer():OBBCenter()
+	--	bpos = DRC.LocalPlayer:GetPos() + DRC.LocalPlayer:OBBCenter()
 		
 		local ht = "default"
 		if IsValid(wpn) then ht = string.lower(wpn:GetHoldType()) end
 		if !DRC.ThirdPerson.DefaultOffsets[ht] then ht = "duel" end
 		
 		local offset
+		local doffset = 0
 		local flipshoulder = GetConVar("cl_drc_thirdperson_flipside"):GetFloat() == 1
 		
 		if settings.UseBaseOffsets == true then
@@ -345,6 +348,8 @@ hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
 			if flipshoulder then
 				offset = (Vector(DRC.ThirdPerson.DefaultOffsets[ht].x, -DRC.ThirdPerson.DefaultOffsets[ht].y, DRC.ThirdPerson.DefaultOffsets[ht].z) * PSMul) or (Vector(DRC.ThirdPerson.DefaultOffsets["duel"].x, -DRC.ThirdPerson.DefaultOffsets["duel"].y, DRC.ThirdPerson.DefaultOffsets["duel"].z) * PSMul)
 			end
+			doffset = offset.x
+			offset.x = 0
 		else
 			offset = settings.Offset * PSMul
 			if flipshoulder then
@@ -354,7 +359,8 @@ hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
 		
 		if wpn.ThirdpersonOffset && (wpn:GetNWBool("Passive") != true) then offset = wpn.ThirdpersonOffset end
 		
-		offset_lerp = LerpVector(RealFrameTime() * 10, offset_lerp or offset, offset)
+		offset_lerp = LerpVector(rft * 10, offset_lerp or offset, offset)
+		doffset_lerp = Lerp(rft * 10, doffset_lerp or doffset, doffset)
 		
 		local bonepos = bpos
 		bpos = LocalToWorld(offset_lerp, ea, bpos, ea)
@@ -362,14 +368,19 @@ hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
 		local trZ = util.TraceLine({
 			start = bonepos,
 			endpos = bpos + ea:Up() * settings.Height * PSMul,
-			filter = function(ent) if ent == ply then return false end end
+			mask = MASK_NPCSOLID_BRUSHONLY,
+			filter = function(ent) if DRC:IsCharacter(ent) then return false end end
 		})
 		
 		local tr = util.TraceLine({
 			start = trZ.HitPos,
-			endpos = trZ.HitPos + ea:Forward() * -settings.Length * PSMul,
-			filter = function(ent) if ent == ply then return false end end
+			endpos = trZ.HitPos + ea:Forward() * (doffset_lerp-settings.Length) * PSMul,
+			mask = MASK_SHOT_PORTAL,
+			filter = function(ent) if DRC:IsCharacter(ent) then return false end end
 		})
+		
+		if tr then DRC:RenderTrace(tr, Color(255, 255, 255, 255), FrameTime(), true) end
+		if trZ then DRC:RenderTrace(trZ, Color(255, 255, 255, 255), FrameTime(), true) end
 		
 		if !DRC.CalcView.ThirdPerson.StoredAng then DRC.CalcView.ThirdPerson.StoredAng = ply:EyeAngles() end
 		
@@ -393,13 +404,23 @@ hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
 		local hitposaim = util.TraceLine({start = DRC.CalcView.ThirdPerson.LerpedFinalPos, endpos = ply:GetEyeTraceNoCursor().HitPos})
 		hitposaim = hitposaim.Normal:Angle()
 		
-		local AAAA = math.Clamp(0.5/RealFrameTime(), 1, 100)
-		local lpos, lang = (RealFrameTime() * AAAA) * settings.LerpPos, (RealFrameTime()*2 * AAAA) * settings.LerpAngle
+		local AAAA = math.Clamp(0.5/rft, 1, 100)
+		local lpos, lang = (rft * AAAA) * settings.LerpPos, (rft*2 * AAAA) * settings.LerpAngle
 		
 		if !DRC.CalcView.ThirdPerson.LerpedFinalPos then DRC.CalcView.ThirdPerson.LerpedFinalPos = ply:EyePos() end
-		DRC.CalcView.ThirdPerson.LerpedZPos = Lerp(lpos*10, DRC.CalcView.ThirdPerson.LerpedZPos or tr.HitPos.z, tr.HitPos.z)
-		tr.HitPos.z = DRC.CalcView.ThirdPerson.LerpedZPos
-		DRC.CalcView.ThirdPerson.LerpedFinalPos = LerpVector(lpos, tr.HitPos or DRC.CalcView.ThirdPerson.LerpedFinalPos, DRC.CalcView.ThirdPerson.LerpedFinalPos)
+	--	DRC.CalcView.ThirdPerson.LerpedZPos = Lerp(lpos*15, tr.HitPos.z or DRC.CalcView.ThirdPerson.LerpedZPos, DRC.CalcView.ThirdPerson.LerpedZPos)
+	--	tr.HitPos.z = DRC.CalcView.ThirdPerson.LerpedZPos
+		
+		local wallb = 0
+		if tr.Hit then wallb = 1 end
+		
+		if !DRC.CalcView.ThirdPerson.WallBLerp then DRC.CalcView.ThirdPerson.WallBLerp = 0 end
+		DRC.CalcView.ThirdPerson.WallBLerp = Lerp(0.95, wallb or DRC.CalcView.ThirdPerson.WallBLerp, DRC.CalcView.ThirdPerson.WallBLerp)
+		
+		local wallpos = tr.HitPos + tr.HitNormal:Angle():Forward() * 2
+		DRC.CalcView.ThirdPerson.WallLerp = LerpVector(DRC.CalcView.ThirdPerson.WallBLerp, tr.HitPos, wallpos)
+		
+		DRC.CalcView.ThirdPerson.LerpedFinalPos = LerpVector(lpos, DRC.CalcView.ThirdPerson.WallLerp or DRC.CalcView.ThirdPerson.LerpedFinalPos, DRC.CalcView.ThirdPerson.LerpedFinalPos)
 		
 	--	if settings.FocalPoint == 2 then
 	--		hitposaim = ply:GetAttachment(ply:LookupAttachment("eyes")).Ang
@@ -427,7 +448,6 @@ hook.Add("CalcView", "!drc_thirdperson", function(ply, pos, angles, fov)
 			end
 			view.fov = settings.BaseFOV * (ply:GetFOV() / 100)
 			view.drawviewer = true
-			if tr.Hit then view.znear = 0.03 else view.znear = 1 end
 		else
 			view = {}
 			view.origin = origin

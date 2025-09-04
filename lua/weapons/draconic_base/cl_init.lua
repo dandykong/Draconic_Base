@@ -86,6 +86,8 @@ function SWEP:GetWeaponAttachment(att)
 end
 
 function SWEP:EffectChain(tbl, ed)
+	local rt = CurTime()
+	if rt < self.EffectGracePeriod then return end
 	local ply = self:GetOwner()
 	if !DRC:IsCharacter(ply) then return end
 	if !tbl then return end

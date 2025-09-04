@@ -132,6 +132,8 @@ SWEP.Thirdperson = false
 SWEP.ThirdpersonForceFreelook = false
 
 SWEP.FireModes_SwitchSound = "Weapon_AR2.Empty"
+SWEP.FireModes_SemiIsPredictive = true
+SWEP.FireModes_BurstIsPredictive = true
 
 -- AIM ASSIST (wip, only used for scripted projectiles currently)
 SWEP.Primary.AimAssist		= true
@@ -392,6 +394,7 @@ SWEP.FireMode				= "none"
 SWEP.OwnerActivity 			= "standidle"
 SWEP.IsDoingMelee 			= false
 SWEP.SymmetricalModel		= false
+SWEP.EffectGracePeriod 		= 0
 SWEP.BurstQueue = {}
 SWEP.MeleeQueue = {}
 SWEP.DynOffsetPos = Vector()
@@ -422,6 +425,8 @@ function SWEP:Initialize()
 	local ply = self:GetOwner()
 	if !game.SinglePlayer() then self:CallOnClient("Initialize") end
 	
+	local ismelee = self.IsMelee
+	
 	self.IdleTimer = CurTime() + 5
 	
 	self.Readied = false
@@ -450,7 +455,7 @@ function SWEP:Initialize()
 	self.DRCVersion = DRC:GetVersion()
 	if self.Primary.NumShots or self.OCNumShots then self.DRCVersion = 1 end
 	
-	if !self.IsMelee then
+	if !ismelee then
 		if self.MeleeHitSoundWorld != nil then
 			self.DRCVersion = 1.01
 		end
@@ -473,7 +478,7 @@ function SWEP:Initialize()
 	if self.LungeHoldTypeCrouch then self.Primary.LungeHoldTypeCrouch = self.LungeHoldTypeCrouch end
 	
 	-- 1.0 -> 1.01 sound to soundtable compatibility
-	if !self.IsMelee && !self.Primary.SoundTable then
+	if !ismelee && !self.Primary.SoundTable then
 		self.Primary.SoundTable = {
 			["Semiauto"] = {
 				["Near"] = self.Primary.Sound,
@@ -498,7 +503,7 @@ function SWEP:Initialize()
 		self.Secondary.EmptySound = DRC.HoldTypes[string.lower(self.HoldType)].drcsounds.dryfire
 	end
 	
-	if !self.IsMelee then
+	if !ismelee then
 		self.DefaultPimaryClipSize = self.Primary.ClipSize
 		self:SetupAttachments("drc_abp_generic", "AmmunitionTypes", false, true)
 		self.SpreadCone = ((self.Primary.Spread * self:GetAttachmentValue("Ammunition", "Spread")))
@@ -513,7 +518,7 @@ function SWEP:Initialize()
 		self.SpreadCone = 15
 	end
 	
-	if self.Primary.Ammo != nil && (self:GetOwner():IsNPC() or self:GetOwner():IsNextBot()) && !self.IsMelee then
+	if self.Primary.Ammo != nil && (self:GetOwner():IsNPC() or self:GetOwner():IsNextBot()) && !ismelee then
 		if self.Primary.Ammo != "ammo_drc_battery" then
 			self.NPCBurstShots = self.Primary.ClipSize * (60 / self.Primary.RPM)
 		else
@@ -528,7 +533,7 @@ function SWEP:Initialize()
 	-- IV04 Nextbot compatiblity, DO NOT TOUCH OR USE.
 	self.HoldType_Aim = self.HoldType
 	if self.Primary.Ammo != nil && self:GetOwner():IsNextBot() then
-		if self.IsMelee == false then
+		if ismelee == false then
 			self.Primary.Delay = 60 / self.Primary.RPM
 			if self.Primary.Ammo != "ammo_drc_battery" then
 				self.BurstLength = self.Primary.ClipSize * (60 / self.Primary.RPM)
@@ -555,7 +560,7 @@ function SWEP:Initialize()
 	end
 	
 	-- Allow custom reload gestures while supporting the old system
-	if self.Primary.ReloadAct == nil && !self.IsMelee then
+	if self.Primary.ReloadAct == nil && !ismelee then
 		if self.Primary.ReloadHoldType == nil then
 			self.Primary.ReloadAct = DRC:GetHoldTypeAnim(string.lower(self:GetHoldType()), "reload", false)
 		else
@@ -571,7 +576,7 @@ function SWEP:Initialize()
 	end
 	
 	-- Fallback to set up thirdperson melee acts if one isn't defined by a weapon author
-	if self.IsMelee == true then
+	if ismelee == true then
 		if self.Primary.MeleeAct == nil then
 			local ht = self.Primary.HoldType
 			self.Primary.MeleeAct = DRC:GetHoldTypeAnim(ht, "attack", false)
@@ -615,7 +620,9 @@ function SWEP:Initialize()
 		if !self.ModifyText then self.ModifyText = "modify ".. (self.InfoName or self.PrintName or "null") .."" end
 	end)
 	
-	if !self.IsMelee then self:InitialFireMode() end
+	if !ismelee then
+		self:InitialFireMode()
+	end
 	
 	if self.WeaponSkinDefaultMat != nil then
 		if !istable(self.WeaponSkinDefaultMat) then self.WeaponSkinDefaultMat = {self.WeaponSkinDefaultMat} end
@@ -703,34 +710,26 @@ function SWEP:Think()
 	if game.SinglePlayer() then self:CallOnClient("Think") end
 	local ply = self:GetOwner()
 	if !IsValid(ply) or DRC:Health(ply) < 0.01 then return end
+	local plyinfo = DRC:GetPlayerInfo(ply)
 	local ct = CurTime()
+	local ekd = ply.KeyDown && ply:KeyDown(IN_USE)
 	
 	self:DoCustomThink()
-	self:ManageAnims(ply, ct)
+	self:ManageAnims(ply, ct, plyinfo)
 	if self.EnableHeat == true then self:DisperseHeat() end
 	
 	if ct > self.LockoutTime then self.Idle = 1 else self.Idle = 0 end
 	
 	if ply:IsPlayer() then
-		local cv, wl, oa = ply:Crouching(), ply:WaterLevel(), self.OwnerActivity
-		local n, s, e, w = ply:KeyDown(IN_FORWARD), ply:KeyDown(IN_BACK), ply:KeyDown(IN_MOVERIGHT), ply:KeyDown(IN_MOVELEFT)
+		local cv, wl = plyinfo.crouching, plyinfo.waterlevel
+		local move, run, sprint = plyinfo.moving, plyinfo.running, plyinfo.sprinting
 		
-		if (n or s or e or w) && cv == false && wl <= 2 then
-			if ply:KeyDown(IN_SPEED) then self.OwnerActivity = "sprinting"
-			else self.OwnerActivity = "running" end
-		elseif (n or s or e or w) && cv == true && wl <= 2 then
-			if ply:KeyDown(IN_SPEED) then self.OwnerActivity = "crouchsprinting"
-			else self.OwnerActivity = "crouchrunning" end
-		elseif (!n or !s or !e or !w) && cv == false && wl <= 2 then
-			self.OwnerActivity = "standidle"
-		elseif (!n or !s or !e or !w) && cv == true && wl <= 2 then
-			self.OwnerActivity = "crouchidle"
-		elseif (n or s or e or w or ply:KeyDown(IN_JUMP)) && wl > 2 then
-			if ply:KeyDown(IN_SPEED) then self.OwnerActivity = "fastswimming"
-			else self.OwnerActivity = "swimming" end
-		elseif (!n or !s or !e or !w) && wl > 2 then
-			self.OwnerActivity = "swimidle"
-		end
+		if run && !cv && wl <= 2 then if sprint then self.OwnerActivity = "sprinting" else self.OwnerActivity = "running" end
+		elseif run && cv && wl <= 2 then if sprint then self.OwnerActivity = "crouchsprinting" else self.OwnerActivity = "crouchrunning" end
+		elseif !run && !cv && wl <= 2 then self.OwnerActivity = "standidle"
+		elseif !run && cv && wl <= 2 then self.OwnerActivity = "crouchidle"
+		elseif run && wl > 2 then if sprint then self.OwnerActivity = "fastswimming" else self.OwnerActivity = "swimming" end
+		elseif !run && wl > 2 then self.OwnerActivity = "swimidle" end
 	end
 	
 	local primcharge = self.Primary.UsesCharge
@@ -802,7 +801,46 @@ function SWEP:Think()
 		if #self.BurstQueue <= 0 then self:ClearBurstQueue() end
 	end
 	
-	if ply:IsPlayer() && self.RegenAmmo == true then self:RegeneratingAmmo(self, self.RegenAmmo_Delay, self.RegenAmmo_Amount) end
+	
+	if !ekd && ply:IsPlayer() then
+		if !self.IsMelee && self:GetLoadedAmmo() > 0 then
+			local fm = self:GetFireMode()
+			if self.Loading or self.IsDoingMelee then self.QueuedTrigger = false end
+			
+			if (fm == 1 && self.FireModes_SemiIsPredictive == true) or (fm == 3 && self.FireModes_BurstIsPredictive == true) then
+				local m1p = ply:KeyPressed(IN_ATTACK)
+				local thyme = CurTime()
+				local delay = self.PrimaryStats.PreCalcRPM
+				local nf = self:GetNextPrimaryFire()
+				
+				if m1p then
+					if fm == 3 then
+						local lf = self.LastFireTime or 0
+						local nf = thyme + delay
+						local greater, lesser = thyme > lf+(delay*0.8), thyme < nf - (delay*0.1)
+						local logic = greater && lesser
+						
+						if logic then self.QueuedTrigger = true end
+					elseif fm == 1 then
+						local greater, lesser = thyme + delay - (delay * 0.1), (self.LastFireTime or 0) + (delay * 0.8)
+						local valid = thyme >= (self.LastFireTime or 0) + delay
+						
+						if m1p && !valid then
+							local predict = thyme > lesser and thyme < greater
+							if predict then self.QueuedTrigger = true end
+						end
+					end
+				else
+					if self.QueuedTrigger == true && thyme > nf then
+						self:PrimaryAttack()
+						self.QueuedTrigger = false
+					end
+				end
+			end
+		end
+		
+		if self.RegenAmmo == true then self:RegeneratingAmmo(self, self.RegenAmmo_Delay, self.RegenAmmo_Amount) end
+	end
 	
 	if self.IntegratedLight_Enabled == true && !ply:IsPlayer() then
 		local b = DRC.SV.drc_npc_uses_integratedlights
@@ -853,7 +891,8 @@ function SWEP:ManageSights(ply, ct)
 	elseif self:CanUseSights() && self.Secondary.Ironsights == true && self.IronCD == false && self.Secondary.Disabled == false then
 		if self.SightsDown != self:GetNWBool("SightsDown") then self.SightsDown = self:GetNWBool("SightsDown") end
 		local sd = self.SightsDown
-		if ply:KeyPressed(IN_ATTACK2) == true && self.SightsDown == false && self:GetNWBool("Inspecting") == false && self.IronCD == false && self.Passive == false && !ply:KeyDown(IN_USE) then
+		local ekey = ply:KeyDown(IN_USE)
+		if ply:KeyPressed(IN_ATTACK2) == true && sd == false && self:GetNWBool("Inspecting") == false && self.IronCD == false && self.Passive == false && !ekey then
 			self:SetIronsights(true, self.Owner)
 			
 			self:AdjustMouseSensitivity()
@@ -862,7 +901,7 @@ function SWEP:ManageSights(ply, ct)
 			if CLIENT && self.Secondary.IronInFP != nil then
 				surface.PlaySound(Sound(self.Secondary.IronInFP))
 			end
-		elseif ply:KeyReleased(IN_ATTACK2) == true && self.SightsDown == true && self.IronCD == false && !ply:KeyDown(IN_USE) then
+		elseif ply:KeyReleased(IN_ATTACK2) == true && sd == true && self.IronCD == false && !ekey then
 			self:SetIronsights(false, self.Owner)
 			
 			self:IronCoolDown()
@@ -985,7 +1024,7 @@ function SWEP:ManageLoopingSounds(ply, ct, passive, overheated, loaded, primchar
 				self.LoopFireSound:Play()
 			else end
 			
-			if !m1d or overheated == true or ply:KeyPressed(IN_USE) then
+			if !m1d or overheated == true or ekp then
 				if self.LoopFireSound then self.LoopFireSound:Stop() end
 			end
 
@@ -1080,7 +1119,7 @@ local fptotp = {
 	[ACT_VM_RELOAD] = ACT_RELOAD,
 	[ACT_VM_RELOAD_EMPTY] = ACT_GESTURE_RELOAD,
 }
-function SWEP:ManageAnims(ply, ct)
+function SWEP:ManageAnims(ply, ct, info)
 	if !IsValid(self) then return end
 	if !IsValid(ply) then return end
 	
@@ -1135,12 +1174,9 @@ function SWEP:ManageAnims(ply, ct)
 	local oa = self.OwnerActivity
 	local cv = ply:Crouching()
 	local slowvar = ply:Crouching() or ply:KeyDown(IN_WALK)
-	
-	local n, s, e, w = ply:KeyDown(IN_FORWARD), ply:KeyDown(IN_BACK), ply:KeyDown(IN_MOVERIGHT), ply:KeyDown(IN_MOVELEFT)
-	local walking = (n or s or e or w)
-	local sprinting = walking && ply:KeyDown(IN_SPEED)
+	local walking, sprinting = info.moving, info.sprinting
+
 	if DRC.SV.drc_force_sprint == 2 then sprinting = false end
-	
 	if self.ManuallyReloading == true or self.Loading == true or self:GetNextPrimaryFire() > ct or self:GetNextSecondaryFire() > ct or self.PreventIdleTimer > ct then return end
 	
 	local idleanim = vm:SelectWeightedSequence(ACT_VM_IDLE)
@@ -1215,14 +1251,17 @@ if CLIENT then
 	SWEP.InterpolateHolsterBoolVal = 1
 	SWEP.VelInterp = 0
 	
-	function SWEP:GetViewModelPosition( pos, ang )
+	function SWEP:GetViewModelPosition(pos, ang)
 		local ply = self:GetOwner()
 		if !IsValid(ply) then return end
 		if !IsValid(self) then return end
 		if ply:IsWorld() then return end
 		
-		local sk = ply:KeyDown(IN_SPEED)
-		local mk = (ply:KeyDown(IN_MOVELEFT) or ply:KeyDown(IN_MOVERIGHT) or ply:KeyDown(IN_FORWARD) or ply:KeyDown(IN_BACK))
+		local plycache = ply.DRC_Info_Cache
+
+		
+		local sk = plycache.Sprint --ply:KeyDown(IN_SPEED)
+		local mk = plycache.N or plycache.S or plycache.E or plycache.W --(ply:KeyDown(IN_MOVELEFT) or ply:KeyDown(IN_MOVERIGHT) or ply:KeyDown(IN_FORWARD) or ply:KeyDown(IN_BACK))
 		local sprint = sk && mk && (self.DoesPassiveSprint == true or DRC.SV.drc_force_sprint == 1)
 		local passive = self:GetNWBool("Passive", false) && DRC.SV.drc_passives >= 1
 		local inspect = self:GetNWBool("Inspecting") && DRC.SV.drc_inspections >= 1
@@ -1919,7 +1958,17 @@ function SWEP:SetupAttachments(att, slot, emptymag, initializing)
 end
 
 function SWEP:PreCalcRPM()
-	self.PrimaryStats.PreCalcRPM = 60/self.Primary.RPM
+	local fm = self:GetFireMode()
+	
+	local fmtranslate = {
+		[1] = self.FireModes_SemiRPM,
+		[2] = self.FireModes_AutoRPM,
+		[3] = self.FireModes_BurstRPM,
+	}
+	local mod = fmtranslate[fm]
+	if mod != nil then self.PrimaryStats.PreCalcRPM = 60/fmtranslate[fm] else self.PrimaryStats.PreCalcRPM = 60/self.Primary.RPM end
+	
+	
 	self.SecondaryStats.PreCalcRPM = 60/self.Secondary.RPM
 	if self.OCStats && self.Primary.OCRPM then self.OCStats.PreCalcRPM = 60/self.Primary.OCRPM end
 end
@@ -2383,7 +2432,7 @@ end
 
 function SWEP:PreDrawViewModel(vm, wep, ply)
 	if game.SinglePlayer() then self:CallOnClient("PreDrawViewModel") end
-	if ply:GetNWBool("Interacting") == true then return true end
+	if ply:GetNWBool("DRC_Interacting") == true then return true end
 	
 	local ammo = wep:Clip1()
 	local slide = self.PistolSlide
@@ -2501,7 +2550,6 @@ function SWEP:SetupVJSupport()
 	hook.Add("Think", self, self.NPC_ServerNextFire)
 end
 
--- SCK
 if CLIENT or game.SinglePlayer() then
 	SWEP.vRenderOrder = nil
 	function SWEP:ViewModelDrawn()
@@ -2605,13 +2653,16 @@ if CLIENT or game.SinglePlayer() then
 		end
 		
 	end
+	
 	SWEP.wRenderOrder = nil
+	
+	
 	function SWEP:DrawWorldModel()
 		
 		local ply = self:GetOwner()
-		local ent = self:EntIndex()
+		local lply = LocalPlayer()
 		
-		if self:EntIndex() != ent then return end
+		if GetConVar("cl_drc_perf_aggressiveculling_weapons"):GetInt() == 1 && DRC:AggressiveCull(self) == true then return end		
 		
 		if ply:IsPlayer() or ply:IsNPC() or ply:IsNextBot() then
 			local ammo = self:Clip1()

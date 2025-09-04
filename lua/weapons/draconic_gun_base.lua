@@ -40,6 +40,9 @@ SWEP.FireModes_CanAuto	= true
 SWEP.FireModes_CanBurst = false
 SWEP.FireModes_CanSemi	= true
 SWEP.FireModes_BurstShots = 3
+SWEP.FireModes_AutoRPM = nil
+SWEP.FireModes_BurstRPM = nil
+SWEP.FireModes_SemiRPM = nil
 
 SWEP.EnableHeat					= false
 SWEP.HPS						= 6
@@ -71,7 +74,7 @@ SWEP.BatteryConsumePerShot		= 0.5
 
 SWEP.Primary.IronRecoilMul	= 0.5
 SWEP.Primary.BloomMul		= 1
-SWEP.Primary.BloomMulCrouch	= 0.5
+SWEP.Primary.BloomMulCrouch	= 1
 SWEP.Primary.BloomMulADS	= 1
 SWEP.Primary.Spread			= 1
 SWEP.Primary.SpreadDiv		= 128 -- This is a remnant of an older era, and left at 128 to minimize the performance impact of using division on lower-spec CPUs. You can still change it in your weapons, but it's kinda pointless in hindsight.
@@ -100,7 +103,7 @@ SWEP.Primary.ReloadTimeEmpty= nil
 SWEP.Primary.APS			= 1
 SWEP.Primary.HealthPerShot	= 0
 SWEP.Primary.ArmourPerShot	= 0
-SWEP.Primary.Tracer			= 1 -- https://wiki.garrysmod.com/page/Effects
+SWEP.Primary.Tracer			= 1
 SWEP.Primary.TracerEffect	= nil -- https://wiki.garrysmod.com/page/Effects
 SWEP.Primary.ActOverride	= nil
 SWEP.Primary.EmptySound		= nil
@@ -165,9 +168,9 @@ SWEP.Secondary.ScopeYOffset 		= -1
 SWEP.Secondary.UsesPrimaryMag	= false
 SWEP.Secondary.NumShots 		= 0
 SWEP.Secondary.IronRecoilMul	= 0.5
-SWEP.Secondary.BloomMul		= 1
-SWEP.Secondary.BloomMulCrouch	= 0.5
-SWEP.Secondary.BloomMulADS	= 1
+SWEP.Secondary.BloomMul			= 1
+SWEP.Secondary.BloomMulCrouch	= 1
+SWEP.Secondary.BloomMulADS		= 1
 SWEP.Secondary.Spread			= 3.5
 SWEP.Secondary.SpreadDiv		= 100
 SWEP.Secondary.SpreadXMul		= 1
@@ -205,9 +208,9 @@ SWEP.Secondary.ProjSpeed			 = 750
 SWEP.Secondary.ProjInheritVelocity = true
 SWEP.Secondary.ProjectileSpawnDelay = 0
 
-SWEP.OCBloomMul		= 1
-SWEP.OCBloomMulCrouch	= 0.5
-SWEP.OCBloomMulADS	= 1
+SWEP.OCBloomMul			= 1
+SWEP.OCBloomMulCrouch	= 1
+SWEP.OCBloomMulADS		= 1
 SWEP.OCSpread			= 0
 SWEP.OCSpreadDiv		= 200
 SWEP.OCSpreadXMul		= 1
@@ -286,6 +289,7 @@ function SWEP:CanPrimaryAttack()
 	local issprinting = sk && mk
 	local wl = ply:WaterLevel()
 	local ct = CurTime()
+	local fm = self:GetFireMode()
 	
 	if self:GetLoadedAmmo() <= 0 then
 		if CLIENT then self:StopSound(self.Primary.EmptySound) self:EmitSound(self.Primary.EmptySound) end
@@ -333,7 +337,7 @@ function SWEP:CanPrimaryAttackNPC()
 	local clip, loaded = self:Clip1(), self:GetLoadedAmmo()
 	local perc = clip/self.Primary.ClipSize
 	
-	print(clip, loaded, perc)
+--	print(clip, loaded, perc)
 	if clip <= 0 or loaded <= 0 or perc < 0.15 then
 		if IsFirstTimePredicted() then self:LoadNextShot() end
 		self:DoNPCReload()
@@ -462,21 +466,24 @@ function SWEP:PrimaryAttack()
 	local fm = self:GetFireMode()
 	local canmelee = self.Primary.CanMelee
 	local dc = self.Primary.UsesCharge
+	local ekd = ply.KeyDown && ply:KeyDown(IN_USE)
 	
 	if !ply:IsPlayer() then self:PrimaryAttackNPC(fireseq, firetime, fm, dc) return end
 	
-	if (self.Primary.UsesCharge == true && ply:IsPlayer()) && ply:KeyDown(IN_USE) then self:DoGunMelee() else end
+	if (self.Primary.UsesCharge == true && ply:IsPlayer()) && ekd then self:DoGunMelee() else end
 	if self.Loading == true or self.ManuallyReloading == true then return end
 	
 	local vm = self
-	if ply:IsPlayer() then vm = ply:GetViewModel() end
+	if ply:IsPlayer() then
+		vm = ply:GetViewModel()
+	end
 	
 	local function LNS()
 		timer.Simple(0, function() self.Loading = true end)
 		timer.Simple(firetime, function() if IsValid(self) && IsValid(ply) && ply:Alive() then self:LoadNextShot() end end)
 	end
 		
-	if canmelee && self:CanGunMelee() && ply:KeyDown(IN_USE) then self:DoGunMelee() return end
+	if canmelee && self:CanGunMelee() && ekd then self:DoGunMelee() return end
 	if self.LoadAfterShot == true && self.LoadAfterReloadEmpty == true && self:GetLoadedAmmo() > 1 then
 		LNS()
 	elseif self.LoadAfterShot == true &&  self.LoadAfterReloadEmpty == false && self:GetLoadedAmmo() > 0 then
@@ -488,6 +495,7 @@ function SWEP:PrimaryAttack()
 		if (self.ChargeType == "dualaction" or self.ChargeType == "discharge") && charge >= 99 && self:CanOvercharge() && self:CanPrimaryAttack() then self:DoOvercharge() end
 	return end
 	
+	if canmelee && ekd then return end
 	if fm != 3 then self:CallShoot(0) return end
 	if fm == 3 then self:DoBurstAttack() return end
 end
@@ -541,6 +549,7 @@ end
 
 function SWEP:FinishLoading()
 	self.Loading = false
+	self.QueuedTrigger = false
 end
 
 function SWEP:SecondaryAttack()
@@ -732,7 +741,8 @@ function SWEP:SetFireMode(mode, showhint)
 			SwitchAnim(ACT_VM_DIFIREMODE, ACT_VM_IFIREMODE)
 		end
 	end
-	self:DoCustomFireMode(mode)	
+	self:PreCalcRPM()
+	self:DoCustomFireMode(mode)
 end
 
 
@@ -895,14 +905,13 @@ function SWEP:DoReload()
 	if !self:CanReloadPrimary() then return end
 	local ply = self:GetOwner()
 	if ply:KeyDown(IN_USE) then return end
-	local reloadseq = self:SelectWeightedSequence( ACT_VM_RELOAD )
-	local reloadtime = self:SequenceDuration( reloadseq )
-	local emptyreloadseq = self:SelectWeightedSequence( ACT_VM_RELOAD_EMPTY )
-	local emptyreloadtime = self:SequenceDuration( emptyreloadseq )
+	local reloadseq = self:SelectWeightedSequence(ACT_VM_RELOAD)
+	local reloadtime = self.ReloadDur or self:SequenceDuration(reloadseq)
+	local emptyreloadseq = self:SelectWeightedSequence(ACT_VM_RELOAD_EMPTY)
+	local emptyreloadtime = self.ReloadDurEmpty or self:SequenceDuration(emptyreloadseq)
 	local BT = self.ActiveAttachments.AmmunitionTypes.t.BulletTable
 	local CM = math.Round(self.Primary.ClipSize * self:GetAttachmentValue("Ammunition", "ClipSizeMul"))
 	local LeftHand = ply:LookupBone("ValveBiped.Bip01_L_Hand")
-	local RightHand = ply:LookupBone("ValveBiped.Bip01_R_Hand")
 	local vm = nil
 	
 	self:ClearBurstQueue()
@@ -994,6 +1003,7 @@ function SWEP:EndReload()
 	self.Loading = false
 	self.IronCD = false
 	self.LoopOutEmptyPlayed = false
+	self.QueuedTrigger = false
 	
 	self.BloomValue = 0.25
 	
@@ -1062,7 +1072,7 @@ return true
 end
 
 function SWEP:PlayManualReloadAnimation()
-	self:PlayAnim(ACT_VM_RELOAD, true)
+	self:PlayAnim(ACT_VM_RELOAD, true, true)
 	if IsFirstTimePredicted() then -- prediction sure is amazing
 		timer.Simple(0, function() self:PlayAnim(ACT_VM_RELOAD, true) end)
 	end
@@ -1072,8 +1082,8 @@ function SWEP:DoManualReload(looped, wasempty)
 	if looped == nil then looped = false end
 	local ply = self:GetOwner()
 	local vm = ply:GetViewModel()
-	local loopseq = self:SelectWeightedSequence( ACT_VM_RELOAD )
-	local looptime = self:SequenceDuration( loopseq )
+	local loopseq = self:SelectWeightedSequence(ACT_VM_RELOAD)
+	local looptime = self:SequenceDuration(loopseq)
 	if !looped then looptime = 0.001 end
 
 	if IsValid(self) && IsValid(ply) && ply:Alive() then

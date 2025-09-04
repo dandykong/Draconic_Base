@@ -1,6 +1,6 @@
 "VertexLitGeneric"
 {
-	"$baseTexture" "models\vuthakral\grey63-0"
+	"$baseTexture" "models\vuthakral\black-100"
 	"$envmap" "env_cubemap"
 
 	$cmpower	2
@@ -12,17 +12,9 @@
 
 	Proxies
 	{
-		drc_ReflectionTint
+		drc_ReflectionTint_caramell
 		{
 			resultVar	$envmaptint
 		}
-		caramell
-		{
-			resultVar		$cmtint
-			resultVar2		$cmtint_fb
-			resultVar3		$color2
-		}
 	}
 }
-
-

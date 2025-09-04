@@ -11,7 +11,7 @@
 DRC.CalcView.MuzzleLamp_Time = 0
 
 hook.Add("Think", "DRC_Lighting", function()
-	local ply = LocalPlayer()
+	local ply = DRC.LocalPlayer
 	if !IsValid(ply) then return end
 	
 	for k,v in pairs(DRC.ActiveWeapons) do
@@ -41,7 +41,7 @@ hook.Add("Think", "DRC_Lighting", function()
 		end
 	end
 	
-	ply = LocalPlayer()
+	ply = DRC.LocalPlayer
 	if !ply:Alive() then return end
 	local vm = ply:GetViewModel()
 	if !IsValid(vm) then return end
@@ -244,8 +244,8 @@ end)
 
 -- ###Misc
 hook.Add("RenderScreenspaceEffects", "DRC_Camera_Overlays", function()
-	local ply = LocalPlayer()
-	if !IsValid(ply) && !ply:Alive() then return end
+	local ply = DRC.LocalPlayer
+	if !IsValid(ply) or !ply:Alive() or !ply.GetActiveWeapon then return end
 	local wpn = ply:GetActiveWeapon()
 	if IsValid(wpn) && wpn:GetClass() == "drc_camera" then
 		DrawMaterialOverlay(DRC.CameraOverlay or "", DRC.CameraPower)
@@ -253,7 +253,8 @@ hook.Add("RenderScreenspaceEffects", "DRC_Camera_Overlays", function()
 end)
 
 hook.Add("GetMotionBlurValues", "drc_modifiedmotionblur", function(horizontal, vertical, forward, rotational)
-	local ply = LocalPlayer()
+	local ply = DRC.LocalPlayer
+	if !IsValid(ply) or !ply:Alive() or !ply.GetActiveWeapon then return end
 	local wpn = ply:GetActiveWeapon()
 	
 	if wpn.Draconic then
@@ -297,5 +298,37 @@ hook.Add("GetMotionBlurValues", "drc_modifiedmotionblur", function(horizontal, v
 			if forward > 0 then forward = 0 end
 		end
 		return horizontal, vertical, forward + ply.ForwardBlurAdditive, rotational + ply.RotationalBlurAdditive
+	end
+end)
+
+if !DRC.AggressiveCulls then DRC.AggressiveCulls = {} end
+hook.Add("PrePlayerDraw", "DRC_AggresiveCull_Players", function(ply, fl)
+	if GetConVar("cl_drc_perf_aggressiveculling_players"):GetInt() == 1 && DRC:AggressiveCull(ply, 3, 2) == true then return true end
+end)
+
+local function AggressiveCullEntity(ent)
+	if DRC.AggressiveCulls[ent] == true && DRC:AggressiveCull(ent) == true then return true end
+end
+
+hook.Add("Think", "DRC_AggressiveCulling", function()
+	if next(DRC.AggressiveCulls) && IsValid(DRC.LocalPlayer) then
+		local b = GetConVar("cl_drc_perf_aggressiveculling_misc"):GetFloat()
+		
+		DRC.AggCullFOV = DRC.LocalPlayer:GetFOV()
+		local fov_desired = GetConVar("fov_desired"):GetInt()
+		DRC.AggCullFOVCheck = DRC.AggCullFOV < fov_desired * 0.8
+		
+		for k,v in pairs(DRC.AggressiveCulls) do
+			if IsValid(v) then
+				if b == 0 then
+					v:SetNoDraw(false)
+				else
+					local culled = DRC:AggressiveCull(v, 1, 2)
+					if v:GetNoDraw() != culled then v:SetNoDraw(culled) end
+				end
+			else
+				 DRC.AggressiveCulls[k] = nil
+			end
+		end
 	end
 end)

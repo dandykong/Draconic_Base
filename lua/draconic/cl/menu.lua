@@ -25,7 +25,7 @@ local ind = {
 }
 
 local function UpdateDraconicColours()		
-	DRC:RefreshColours(LocalPlayer())
+	DRC:RefreshColours(DRC.LocalPlayer)
 end
 
 local function MakeHint(element, posx, posy, hint)
@@ -113,8 +113,8 @@ function DRCMenu(ply)
 			Derma.PlayerFrame1:SetWide(ScrW()*0.5)
 			Derma.PlayerApplyButton:SetPos(Derma.PlayerFrame1:GetWide()*0.5 - 64,10)
 			local spraymax = math.Clamp(windowwidehalf, windowwidehalf, 1024)
-			Derma.SprayPreview:SetSize(spraymax, spraymax)
-			Derma.SprayPreview:Dock(NODOCK)
+--			Derma.SprayPreview:SetSize(spraymax, spraymax)
+--			Derma.SprayPreview:Dock(NODOCK)
 			
 			RefreshIcons(true)
 		elseif maximized == true then
@@ -125,8 +125,8 @@ function DRCMenu(ply)
 			
 			Derma.PlayerFrame1:SetWide(windowwide*0.5)
 			Derma.PlayerApplyButton:SetPos(230,10)
-			Derma.SprayPreview:SetSize(320, 320)
-			Derma.SprayPreview:Dock(FILL)
+--			Derma.SprayPreview:SetSize(320, 320)
+--			Derma.SprayPreview:Dock(FILL)
 			
 			RefreshIcons(false)
 		end
@@ -177,7 +177,7 @@ function DRCMenu(ply)
 	MapAmbient.r = math.Clamp(MapAmbient.r, 35, 255)
 	MapAmbient.g = math.Clamp(MapAmbient.g, 35, 255)
 	MapAmbient.b = math.Clamp(MapAmbient.b, 35, 255)
-	local LocalAmbient = render.GetLightColor(LocalPlayer():EyePos()) * 255
+	local LocalAmbient = render.GetLightColor(DRC.LocalPlayer:EyePos()) * 255
 	local PreviewAmbient = Color((MapAmbient.r + LocalAmbient.r), (MapAmbient.g + LocalAmbient.g), (MapAmbient.b + LocalAmbient.b), 255)
 	
 	Derma.PlayerBG = vgui.Create("DImage", frame)
@@ -205,11 +205,11 @@ function DRCMenu(ply)
 	frame.tools:SetEnabled(true)
 	frame.tools:SetBackgroundColor(Color(0,0,0,0))
 	
-	--local pmodel = LocalPlayer():GetInfo( "cl_playermodel" )
+	--local pmodel = DRC.LocalPlayer:GetInfo( "cl_playermodel" )
 	--local pmodelname = player_manager.TranslatePlayerModel( pmodel )
-	local pmodelname = LocalPlayer():GetModel()
+	local pmodelname = DRC.LocalPlayer:GetModel()
 	
-	if Customization != true then pmodelname = LocalPlayer():GetModel() end
+	if Customization != true then pmodelname = DRC.LocalPlayer:GetModel() end
 	
 	MapAmbient.r = math.Clamp(MapAmbient.r, 127, 255)
 	MapAmbient.g = math.Clamp(MapAmbient.g, 127, 255)
@@ -800,7 +800,7 @@ function DRCMenu(ply)
 					camomarker:SetImage("icon16/palette.png")
 					camomarker:SetSize(16, 16)
 					camomarker:SetPos(46, 2)
-					camomarker:SetTooltip("This model supports camoflauges.")
+					camomarker:SetTooltip("This model supports camouflages.")
 				end
 				
 				PanelSelect:AddPanel( icon, { cl_playermodel = name } )
@@ -1075,37 +1075,37 @@ function DRCMenu(ply)
 	
 	function applybutton:DoClick()
 		local bgs = DRC:GetBodyGroups(frame.preview:GetEntity())
-		local handval = player_manager.TranslatePlayerModel(LocalPlayer():GetInfo("cl_playerhands"))
+		local handval = player_manager.TranslatePlayerModel(DRC.LocalPlayer:GetInfo("cl_playerhands"))
 		local pmname = player_manager.TranslateToPlayerModelName(handval)
-		if LocalPlayer():GetInfo("cl_playerhands") == "disabled" then 
+		if DRC.LocalPlayer:GetInfo("cl_playerhands") == "disabled" then 
 			pmname = player_manager.TranslateToPlayerModelName(frame.preview:GetModel())
 		end
 		local handstable = player_manager.TranslatePlayerHands(pmname)
-		if LocalPlayer():GetInfo("cl_playerhands") != "disabled" then 
-			handstable.model = LocalPlayer():GetInfo("cl_playerhands")
+		if DRC.LocalPlayer:GetInfo("cl_playerhands") != "disabled" then 
+			handstable.model = DRC.LocalPlayer:GetInfo("cl_playerhands")
 			handval = handstable.model
 		end
 		
 		local tbl = {}
 		if Customization == false then -- Disallowed
 			tbl = {
-				["player"] = LocalPlayer(),
-				["model"] = LocalPlayer():GetModel(),
-				["colours"] = DRC:GetColours(LocalPlayer(), false),
+				["player"] = DRC.LocalPlayer,
+				["model"] = DRC.LocalPlayer:GetModel(),
+				["colours"] = DRC:GetColours(DRC.LocalPlayer, false),
 				["bodygroups"] = bgs,
 				["skin"] = frame.preview:GetEntity():GetSkin(),
 				["voiceset"] = VSelection,
 				["footsteps"] = FSelection,
 				["hands"] = {
 					["model"] = handval,
-					["bodygroups"] = LocalPlayer():GetInfo("cl_playerhands_bodygroups"),
-					["skin"] = LocalPlayer():GetInfo("cl_playerhands_skin"),
+					["bodygroups"] = DRC.LocalPlayer:GetInfo("cl_playerhands_bodygroups"),
+					["skin"] = DRC.LocalPlayer:GetInfo("cl_playerhands_skin"),
 				}
 			}
 		elseif Customization == nil then -- Tweak-only
 			tbl = {
-				["player"] = LocalPlayer(),
-				["model"] = LocalPlayer():GetModel(),
+				["player"] = DRC.LocalPlayer,
+				["model"] = DRC.LocalPlayer:GetModel(),
 				["colours"] = {
 					["Energy"] = Color(energyColour:GetColor().r, energyColour:GetColor().g, energyColour:GetColor().b),
 					["Eye"] = Color(eyecolour:GetColor().r, eyecolour:GetColor().g, eyecolour:GetColor().b),
@@ -1113,7 +1113,7 @@ function DRCMenu(ply)
 					["Tint1"] = Color(accentColour1:GetColor().r, accentColour1:GetColor().g, accentColour1:GetColor().b),
 					["Tint2"] = Color(accentColour2:GetColor().r, accentColour2:GetColor().g, accentColour2:GetColor().b),
 					["Weapon"] = Color(weaponcolour:GetColor().r, weaponcolour:GetColor().g, weaponcolour:GetColor().b),
-					["Grunge"] = LocalPlayer():GetInfo("drc_playergrunge"),
+					["Grunge"] = DRC.LocalPlayer:GetInfo("drc_playergrunge"),
 				},
 				["bodygroups"] = bgs,
 				["skin"] = frame.preview:GetEntity():GetSkin(),
@@ -1121,13 +1121,13 @@ function DRCMenu(ply)
 				["footsteps"] = FSelection,
 				["hands"] = {
 					["model"] = handval,
-					["bodygroups"] = LocalPlayer():GetInfo("cl_playerhands_bodygroups"),
-					["skin"] = LocalPlayer():GetInfo("cl_playerhands_skin"),
+					["bodygroups"] = DRC.LocalPlayer:GetInfo("cl_playerhands_bodygroups"),
+					["skin"] = DRC.LocalPlayer:GetInfo("cl_playerhands_skin"),
 				}
 			}
 		elseif Customization == true then -- Allowed
 			tbl = {
-				["player"] = LocalPlayer(),
+				["player"] = DRC.LocalPlayer,
 				["model"] = frame.preview:GetModel(),
 				["colours"] = {
 					["Energy"] = Color(energyColour:GetColor().r, energyColour:GetColor().g, energyColour:GetColor().b),
@@ -1136,7 +1136,7 @@ function DRCMenu(ply)
 					["Tint1"] = Color(accentColour1:GetColor().r, accentColour1:GetColor().g, accentColour1:GetColor().b),
 					["Tint2"] = Color(accentColour2:GetColor().r, accentColour2:GetColor().g, accentColour2:GetColor().b),
 					["Weapon"] = Color(weaponcolour:GetColor().r, weaponcolour:GetColor().g, weaponcolour:GetColor().b),
-					["Grunge"] = LocalPlayer():GetInfo("drc_playergrunge"),
+					["Grunge"] = DRC.LocalPlayer:GetInfo("drc_playergrunge"),
 				},
 				["bodygroups"] = bgs,
 				["skin"] = frame.preview:GetEntity():GetSkin(),
@@ -1144,14 +1144,16 @@ function DRCMenu(ply)
 				["footsteps"] = FSelection,
 				["hands"] = {
 					["model"] = handval,
-					["bodygroups"] = LocalPlayer():GetInfo("cl_playerhands_bodygroups"),
-					["skin"] = LocalPlayer():GetInfo("cl_playerhands_skin"),
+					["bodygroups"] = DRC.LocalPlayer:GetInfo("cl_playerhands_bodygroups"),
+					["skin"] = DRC.LocalPlayer:GetInfo("cl_playerhands_skin"),
 				}
 			}
 		end
 		handstable.skin = tbl.hands.skin
 		handstable.bodygroups = tbl.hands.bodygroups
 		tbl.camo = camo
+		tbl.camoscale = DRC.LocalPlayer:GetInfoNum("cl_playercamo_scale", 1)
+		tbl.sticker = DRC.LocalPlayer:GetInfo("cl_playersticker")
 		
 		net.Start("DRC_ApplyPlayermodel")
 		net.WriteTable(tbl)
@@ -1182,11 +1184,6 @@ function DRCMenu(ply)
 	tab5:SetPadding(0)
 	tabs:AddSheet( "Extra", tab5, "icon16/draconic_base.png" )
 	
-	tab5.SpraySettings = vgui.Create( "DPanel", tab1 )
-	tab5.SpraySettings:DockPadding(16, 16, 0, 0)
-	tab5.SpraySettings:SetBackgroundColor(uicols.invis)
-	tab5:AddSheet( "Spray Settings", tab5.SpraySettings, "icon16/layers.png")
-	
 	tab5.VoiceSetSettings = vgui.Create( "DPanel", tab1 )
 	tab5.VoiceSetSettings:DockPadding(16, 16, 0, 0)
 	tab5.VoiceSetSettings:SetBackgroundColor(uicols.invis)
@@ -1204,21 +1201,34 @@ function DRCMenu(ply)
 		tab5.Camos.Paint = function(self, w, h)
 			draw.RoundedBox(0, 0, 0, w, h, Color(0, 0, 0, 0))
 		end
-		tab1:AddSheet("Camoflauge", tab5.Camos, "icon16/folder_palette.png")
+		tab1:AddSheet("Camouflage", tab5.Camos, "icon16/folder_palette.png")
 		tab5.Camos.Loaded = false
 		
-		MakeHint(tab5.Camos, 567, 10, "These ''camoflauges'' will only work on playermodels set up for it.")
+		local camoscale = vgui.Create("DNumSlider", tab5.Camos)
+		camoscale:Dock(BOTTOM)
+		camoscale:DockMargin(8,0,0,8	)
+		camoscale:SetSize(500, 32)
+		camoscale:SetText("Camo Scale")
+		camoscale:SetMin(0.1)
+		camoscale:SetMax(3)
+		camoscale:SetDecimals(4)
+		camoscale:SetConVar("cl_playercamo_scale")
+		
+		MakeHint(tab5.Camos, 567, 10, "These ''camouflages'' will only work on playermodels set up for it.")
 		
 		LoadCamos = function()
 			tab5.Camos.Loaded = true
 			local cats = {}
+			local subcats = {}
 			for k,v in pairs(DRC.WeaponSkins) do
 				local name, desc, id = v.name or "", v.desc or "", k
 				local cat = v.type
-				local skin = {name, desc, id}
+				local subcat = v.category
+				local skin = {name, desc, id, subcat}
 				if !cats[cat] then cats[cat] = {} end
 				cats[cat][id] = skin
 				cats[cat].num = -1
+				if !subcats[subcat] then subcats[subcat] = {cat, subcat} end
 			end
 			
 			local icons = {
@@ -1226,24 +1236,11 @@ function DRCMenu(ply)
 				["ARC9"] = {1, "arc9/icon_16.png", "ARC9 Camos", function() end }
 			}
 			for k,v in pairs(cats) do
-				tab5.Camos[k] = vgui.Create("DPanelSelect", tab1)
+				tab5.Camos[k] = vgui.Create("DCategoryList", tab5.Camos)
 				local sec = tab5.Camos[k]
-			--	sec:Dock(FILL)
+				sec:Dock(FILL)
 				sec:DockPadding(0,0,0,0)
 				tab5.Camos:AddSheet(k, sec, icons[k][2])
-				
-				local removebutton = vgui.Create("DImageButton", sec)
-				removebutton:SetSize(64,64)
-				removebutton:SetTooltip("None\n\nRemove applied camoflauge.")
-				removebutton:SetImage("gui/cross.png")
-				removebutton:SetColor(Color(255, 0, 0, 127))
-					
-				sec:AddPanel(removebutton)
-				
-				removebutton.DoClick = function()
-					camo = nil
-					DRC:SetCamo(frame.preview.Entity, camo, name)
-				end
 			end
 			
 			local function MakeSkinButton(parent, name, desc, id, icontex)
@@ -1261,18 +1258,54 @@ function DRCMenu(ply)
 				return btn
 			end
 			
+			local subcordions = {}
+			local function MakeAccordion(parent, title)
+				local accordion = parent:Add(title)
+				accordion:Dock(TOP)
+				
+				local selector = vgui.Create("DPanelSelect", accordion)
+				selector:Dock(FILL)
+				selector:DockPadding(0,0,0,0)
+				selector:SetTall(0)
+				
+				parent:AddItem(selector)
+				
+				subcordions[title] = selector
+				
+				local removebutton = vgui.Create("DImageButton", accordion)
+				removebutton:SetSize(64,64)
+				removebutton:SetTooltip("None\n\nRemove applied camouflage.")
+				removebutton:SetImage("gui/cross.png")
+				removebutton:SetColor(Color(255, 0, 0, 127))
+					
+				selector:AddPanel(removebutton)
+				
+				removebutton.DoClick = function()
+					camo = nil
+					DRC:SetCamo(frame.preview.Entity, camo, name)
+				end
+				
+				accordion.OnToggle = function(panel, b)
+					if b == true then selector:SetTall(0) else selector:SetTall(512) end
+				end
+			end
+			
+			for k,v in pairs(subcats) do MakeAccordion(tab5.Camos[v[1]], v[2]) end
+			
 			for k,v in SortedPairs(DRC.WeaponSkins) do
 				local name, desc, id = v.name or "", v.desc or "", k				
 				local cat = v.type
+				local category = v.category
 						
-				MakeSkinButton(tab5.Camos[cat], name, desc, id, v.icon)
+			--	MakeSkinButton(tab5.Camos[cat], name, desc, id, v.icon)
+				MakeSkinButton(subcordions[category], name, desc, id, v.icon)
 			end
 		end
 		
 		
 		function tab1:OnActiveTabChanged(old, new)
 			local mode = new:GetText()
-			if mode == "Camoflauge" && tab5.Camos.Loaded != true then LoadCamos() end
+			if mode == "Camouflage" && tab5.Camos.Loaded != true then LoadCamos() end
 		end
 	end
 --	LoadCamos()
@@ -1280,82 +1313,104 @@ function DRCMenu(ply)
 	local tab4 = vgui.Create( "DPanel", tabs )
 --	tab4:SetBackgroundColor( Color(255, 255, 255, 255) )
 --	tab4:Dock(FILL)
-	tabs:AddSheet( "Saved Avatars", tab4, "icon16/award_star_gold_1.png" )
+	tabs:AddSheet("Saved Avatars", tab4, "icon16/award_star_gold_1.png")
 	
+	tab5.Spray = vgui.Create("DPropertySheet", tab1)
+		tab5.Spray:DockPadding(0, 0, 0, 0)
+		tab5.Spray.Paint = function(self, w, h)
+			draw.RoundedBox(0, 0, 0, w, h, Color(0, 0, 0, 0))
+	end
+	tab5.Spray.Loaded = false
+	tab1:AddSheet("Spray/Sticker", tab5.Spray, "icon16/layers.png")
+	
+	tab5.SpraySettings = vgui.Create( "DPanel", tab5.Spray)
+	tab5.SpraySettings:Dock(TOP)
+	tab5.SpraySettings:SetTall(100)
+	tab5.SpraySettings:DockMargin(8, 0, 0, 8)
+	tab5.SpraySettings:DockPadding(8, 0, 0, 8)
+	tab5.SpraySettings:SetBackgroundColor(uicols.invis)
+	
+	tab5.Spray.preview = vgui.Create("DImage", tab5.Spray)
+	tab5.Spray.preview:SetPos(300, 4)
+	tab5.Spray.preview:SetSize(128, 128)
+	tab5.Spray.preview:SetImageColor(Color(255, 255, 255, 255))
+	tab5.Spray.preview:SetMaterial("vgui/drc_spraypreview")
+	
+	tab5.SpraySelector = vgui.Create("DPanelSelect", tab5.Spray)
+	tab5.SpraySelector:Dock(FILL)
+	tab5.SpraySelector:DockMargin(8, 0, 0, 8)
+	tab5.SpraySelector:DockPadding(0,0,0,0)
+	tab5.SpraySelector:SetTall(0)
+		
 	local Sprays_General = vgui.Create( "DCheckBoxLabel", tab5.SpraySettings )
 	Sprays_General:SetPos(8, 0)
 	Sprays_General:SetSize(500, 20)
-	Sprays_General:SetText( "Display spray on spawned props/entities" )
+	Sprays_General:SetText("Display on spawned props/entities")
 	Sprays_General:SetConVar( "cl_drc_showspray" )
-	Sprays_General.Label:SetColor(Color(0, 0, 0, 255))
 	Sprays_General:SetEnabled(true)
 	Sprays_General:Dock(TOP)
 	
 	local Sprays_Vehicles = vgui.Create( "DCheckBoxLabel", tab5.SpraySettings )
 	Sprays_Vehicles:SetPos(8, 18)
 	Sprays_Vehicles:SetSize(500, 20)
-	Sprays_Vehicles:SetText( "Display spray on vehicles" )
+	Sprays_Vehicles:SetText( "Display on vehicles" )
 	Sprays_Vehicles:SetConVar( "cl_drc_showspray_vehicles" )
-	Sprays_Vehicles.Label:SetColor(Color(0, 0, 0, 255))
 	Sprays_Vehicles:SetEnabled(true)
 	Sprays_Vehicles:Dock(TOP)
 	
 	local Sprays_Weapons = vgui.Create( "DCheckBoxLabel", tab5.SpraySettings )
 	Sprays_Weapons:SetPos(8, 36)
 	Sprays_Weapons:SetSize(500, 20)
-	Sprays_Weapons:SetText( "Display spray on weapons" )
+	Sprays_Weapons:SetText( "Display on weapons" )
 	Sprays_Weapons:SetConVar( "cl_drc_showspray_weapons" )
-	Sprays_Weapons.Label:SetColor(Color(0, 0, 0, 255))
 	Sprays_Weapons:SetEnabled(true)
 	Sprays_Weapons:Dock(TOP)
 	
 	local Sprays_Player = vgui.Create( "DCheckBoxLabel", tab5.SpraySettings )
 	Sprays_Player:SetPos(8, 54)
 	Sprays_Player:SetSize(500, 20)
-	Sprays_Player:SetText( "Display spray on yourself (playermodel)" )
+	Sprays_Player:SetText( "Display on yourself (playermodel)" )
 	Sprays_Player:SetConVar( "cl_drc_showspray_player" )
-	Sprays_Player.Label:SetColor(Color(0, 0, 0, 255))
 	Sprays_Player:SetEnabled(true)
 	Sprays_Player:Dock(TOP)
 	
-	local SpraypreviewText = vgui.Create("DLabel", tab5.SpraySettings)
-	SpraypreviewText:SetPos(8, 78)
-	SpraypreviewText:SetSize(500, 32)
-	SpraypreviewText:SetTextColor(Color(0, 0, 0, 255))
-	SpraypreviewText:SetText("Your spray:")
-	SpraypreviewText:SetFont("DermaLarge")
-	SpraypreviewText:Dock(TOP)
+	local Sprays_Label = vgui.Create( "DLabel", tab5.SpraySettings )
+	Sprays_Label:SetPos(8, 0)
+	Sprays_Label:SetSize(500, 32)
+	Sprays_Label:SetText("Spray/Sticker selection")
+	Sprays_Label:Dock(TOP)
+	Sprays_Label:DockMargin(0, 8, 8, 0)
+	Sprays_Label:SetFont("DermaLarge")
 	
-	local Spraypreview = vgui.Create("DImage", tab5.SpraySettings)
-	Derma.SprayPreview = Spraypreview
-	Spraypreview:SetPos(8, 115)
-	Spraypreview:SetSize(320, 320)
-	Spraypreview:SetImageColor(Color(255, 255, 255, 255))
-	Spraypreview:SetMaterial("vgui/drc_spraypreview")
-	Spraypreview:Dock(FILL)
-	Spraypreview:DockPadding(0, 0, 0, 0)
-	Spraypreview:DockMargin(70, 0, 70, 0)
+	local sticker = ply:GetInfo("cl_playersticker")
+	local function MakeSticker(id, mat, desc)
+		local selection = vgui.Create("DImageButton", tab5.SpraySelector)
+		selection:SetSize(64,64)
+		selection:SetMaterial(mat)
+		selection:SetTooltip(desc)
+		tab5.SpraySelector:AddPanel(selection)
+		
+		selection.DoClick = function()
+			 sticker = id
+			 tab5.Spray.preview:SetMaterial(mat)
+			 DRC.LocalPlayer:ConCommand("cl_playersticker ".. id .."")
+		end
+	end
+	
+	MakeSticker("nil", "vgui/drc_spraypreview", "Your spray.\n\nTo set a custom spray, go to your options menu and check the ''Multiplayer'' tab.\nSprays only update on session initialization.")
+	for k,v in pairs(DRC.ARC9Stickers) do
+		MakeSticker(k, v[2], v[3])
+	end
+	
+	--[[
 	
 	local SprayDisclaimer = vgui.Create("DLabel", tab5.SpraySettings)
 	SprayDisclaimer:SetPos(16, 430)
 	SprayDisclaimer:SetSize(400, 64)
 	SprayDisclaimer:SetTextColor(Color(0, 0, 0, 255))
 	SprayDisclaimer:Dock(BOTTOM)
-	SprayDisclaimer:SetText("To set a spray, go to your options menu and check the ''Multiplayer'' tab.\nSprays only update on session initialization. \n\nYour spray will only appear on content with support for it.")
-	
---[[	tab5.VoiceSetSettings.VoiceSelector = vgui.Create( "DComboBox", tab5.VoiceSetSettings )
-	tab5.VoiceSetSettings.VoiceSelector:SetSortItems(true)
-	tab5.VoiceSetSettings.VoiceSelector:SetPos(8, 32)
-	tab5.VoiceSetSettings.VoiceSelector:SetSize(150, 20)
-	tab5.VoiceSetSettings.VoiceSelector:SetConVar( "cl_drc_voiceset" )
-	tab5.VoiceSetSettings.VoiceSelector:AddChoice("[!] None", "none")
-	for k,v in pairs(DRC.VoiceSets) do
-		local tbl = DRC.VoiceSets[k]
-		tab5.VoiceSetSettings.VoiceSelector:AddChoice(tbl.Name, tbl.ID)
-	end
-	function tab5.VoiceSetSettings.VoiceSelector:OnSelect(index, value, data)
-		
-	end ]]
+	SprayDisclaimer:SetText("To set a custom spray, go to your options menu and check the ''Multiplayer'' tab.\nSprays only update on session initialization. \n\nYour spray will only appear on content with support for it.")
+	]]
 	
 	local function RefreshVoiceSets()
 		DRCMenu_VoiceSelector = vgui.Create("DScrollPanel", tab5.VoiceSetSettings)
@@ -1370,16 +1425,16 @@ function DRCMenu(ply)
 		DRCMenu_VoiceSelector.DisableButton:Dock(TOP)
 		DRCMenu_VoiceSelector.DisableButton:DockMargin(0, 0, 0, 1)
 		DRCMenu_VoiceSelector.DisableButton.DoClick = function()
-			LocalPlayer():ConCommand("cl_drc_voiceset None")
+			DRC.LocalPlayer:ConCommand("cl_drc_voiceset None")
 			VSelection = "None"
 			DRCMenu_VoiceSelector.DisableButton:SetEnabled(false)
 			timer.Simple(0.1, function()
-				LocalPlayer():ConCommand("cl_drc_voiceset None")
+				DRC.LocalPlayer:ConCommand("cl_drc_voiceset None")
 				DRCMenu_VoiceSelector:Remove()
 				RefreshVoiceSets()
 			end)
 		end
-		if LocalPlayer():GetInfo("cl_drc_voiceset") == "None" then DRCMenu_VoiceSelector.DisableButton:SetEnabled(false) end
+		if DRC.LocalPlayer:GetInfo("cl_drc_voiceset") == "None" then DRCMenu_VoiceSelector.DisableButton:SetEnabled(false) end
 	
 		for k,v in SortedPairsByMemberValue(DRC.VoiceSets, "Name", false) do
 		--[[	local container = vgui.Create("DPanel", DRCMenu_VoiceSelector)
@@ -1393,17 +1448,17 @@ function DRCMenu(ply)
 			label:SetText(v.Name)
 			label:Dock(TOP)
 			label:DockMargin(0, 0, 0, 1)
-			if string.lower(LocalPlayer():GetInfo("cl_drc_voiceset")) != "none" && DRC.VoiceSets[LocalPlayer():GetInfo("cl_drc_voiceset")] then
-				if v.Name == DRC.VoiceSets[LocalPlayer():GetInfo("cl_drc_voiceset")].Name then
+			if string.lower(DRC.LocalPlayer:GetInfo("cl_drc_voiceset")) != "none" && DRC.VoiceSets[DRC.LocalPlayer:GetInfo("cl_drc_voiceset")] then
+				if v.Name == DRC.VoiceSets[DRC.LocalPlayer:GetInfo("cl_drc_voiceset")].Name then
 					label:SetEnabled(false)
 				end
 			end
 			label.DoClick = function()
-				LocalPlayer():ConCommand("cl_drc_voiceset ".. v.ID .."")
+				DRC.LocalPlayer:ConCommand("cl_drc_voiceset ".. v.ID .."")
 				VSelection = v.ID
 				label:SetEnabled(false)
 				timer.Simple(0, function()
-					LocalPlayer():ConCommand("cl_drc_voiceset ".. v.ID .."")
+					DRC.LocalPlayer:ConCommand("cl_drc_voiceset ".. v.ID .."")
 					DRCMenu_VoiceSelector:Remove()
 					RefreshVoiceSets()
 				end)
@@ -1413,7 +1468,7 @@ function DRCMenu(ply)
 	RefreshVoiceSets()
 	
 	tab5.VoiceSetSettings.Enforced = ""
-	if LocalPlayer():GetNWInt("DRCVoiceSet_Enforced", "None") == "None" then
+	if DRC.LocalPlayer:GetNWInt("DRCVoiceSet_Enforced", "None") == "None" then
 		tab5.VoiceSetSettings.Enforced = "\n\nYou are NOT currently being enforced to use a specific VS."
 	else
 		tab5.VoiceSetSettings.Enforced = "\n\nYou ARE currently being enforced to use a specific VS."
@@ -1466,16 +1521,16 @@ function DRCMenu(ply)
 		DRCMenu_VoiceSelector.DisableButton:Dock(TOP)
 		DRCMenu_VoiceSelector.DisableButton:DockMargin(0, 0, 0, 1)
 		DRCMenu_VoiceSelector.DisableButton.DoClick = function()
-			LocalPlayer():ConCommand("cl_drc_footstepset None")
+			DRC.LocalPlayer:ConCommand("cl_drc_footstepset None")
 			FSelection = "None"
 			DRCMenu_VoiceSelector.DisableButton:SetEnabled(false)
 			timer.Simple(0.1, function()
-				LocalPlayer():ConCommand("cl_drc_footstepset None")
+				DRC.LocalPlayer:ConCommand("cl_drc_footstepset None")
 				DRCMenu_VoiceSelector:Remove()
 				RefreshFootsteps()
 			end)
 		end
-		if LocalPlayer():GetInfo("cl_drc_footstepset") == "None" then DRCMenu_VoiceSelector.DisableButton:SetEnabled(false) end
+		if DRC.LocalPlayer:GetInfo("cl_drc_footstepset") == "None" then DRCMenu_VoiceSelector.DisableButton:SetEnabled(false) end
 	
 		for k,v in SortedPairsByMemberValue(DRC.FootSteps, "Name", false) do
 		--[[	local container = vgui.Create("DPanel", DRCMenu_VoiceSelector)
@@ -1489,17 +1544,17 @@ function DRCMenu(ply)
 			label:SetText(v.Name)
 			label:Dock(TOP)
 			label:DockMargin(0, 0, 0, 1)
-			if string.lower(LocalPlayer():GetInfo("cl_drc_footstepset")) != "none" && DRC.FootSteps[LocalPlayer():GetInfo("cl_drc_footstepset")] then
-				if v.Name == DRC.FootSteps[LocalPlayer():GetInfo("cl_drc_footstepset")].Name then
+			if string.lower(DRC.LocalPlayer:GetInfo("cl_drc_footstepset")) != "none" && DRC.FootSteps[DRC.LocalPlayer:GetInfo("cl_drc_footstepset")] then
+				if v.Name == DRC.FootSteps[DRC.LocalPlayer:GetInfo("cl_drc_footstepset")].Name then
 					label:SetEnabled(false)
 				end
 			end
 			label.DoClick = function()
-				LocalPlayer():ConCommand("cl_drc_footstepset ".. v.ID .."")
+				DRC.LocalPlayer:ConCommand("cl_drc_footstepset ".. v.ID .."")
 				FSelection = v.ID
 				label:SetEnabled(false)
 				timer.Simple(0, function()
-					LocalPlayer():ConCommand("cl_drc_footstepset ".. v.ID .."")
+					DRC.LocalPlayer:ConCommand("cl_drc_footstepset ".. v.ID .."")
 					DRCMenu_VoiceSelector:Remove()
 					RefreshFootsteps()
 				end)
@@ -1509,7 +1564,7 @@ function DRCMenu(ply)
 	RefreshFootsteps()
 	
 	tab5.FootstepSounds.Enforced = ""
-	if LocalPlayer():GetNWInt("DRCVoiceSet_Enforced", "None") == "None" then
+	if DRC.LocalPlayer:GetNWInt("DRCVoiceSet_Enforced", "None") == "None" then
 		tab5.FootstepSounds.Enforced = "\n\nYou are NOT currently being enforced to use a specific set."
 	else
 		tab5.FootstepSounds.Enforced = "\n\nYou ARE currently being enforced to use a specific set."
@@ -1689,7 +1744,7 @@ function DRCMenu(ply)
 		end
 		
 		local function UpdateFromConvars()
-			local model = LocalPlayer():GetInfo("cl_playermodel")
+			local model = DRC.LocalPlayer:GetInfo("cl_playermodel")
 			modelname = player_manager.TranslatePlayerModel(model)
 			if Customization == true then
 				util.PrecacheModel(modelname)
@@ -1777,10 +1832,10 @@ function DRCMenu(ply)
 		accentColour1preview:SetBackgroundColor(accentColour1:GetColor())
 		accentColour2preview:SetBackgroundColor(accentColour2:GetColor())
 		
-		DRC:RefreshColours(LocalPlayer())
+		DRC:RefreshColours(DRC.LocalPlayer)
 		SetupScene(tbl.Model)
 		timer.Simple(0.1, function() RebuildBodygroupTab() end)
-		timer.Simple(0.5, function() DRC:RefreshColours(LocalPlayer()) end)
+		timer.Simple(0.5, function() DRC:RefreshColours(DRC.LocalPlayer) end)
 	end
 	
 	local SaveLoad = vgui.Create("DPanel", tab4)
@@ -1965,29 +2020,29 @@ function DRCMenu(ply)
 		Frame:SetTitle("Enter a name for your save.")
 		
 		local colours = {
-			["Player"] = Vector(LocalPlayer():GetInfo("cl_playercolor")) * 255,
-			["Weapon"] = Vector(LocalPlayer():GetInfo("cl_weaponcolor")) * 255,
+			["Player"] = Vector(DRC.LocalPlayer:GetInfo("cl_playercolor")) * 255,
+			["Weapon"] = Vector(DRC.LocalPlayer:GetInfo("cl_weaponcolor")) * 255,
 			["Eye"] = Vector(0, 0, 0),
 			["Energy"] = Vector(0, 0, 0),
 			["Tint1"] = Vector(0, 0, 0),
 			["Tint2"] = Vector(0, 0, 0)
 		}
 		
-		colours.Tint1.x = LocalPlayer():GetInfoNum("cl_drc_tint1_r", 127)
-		colours.Tint1.y = LocalPlayer():GetInfoNum("cl_drc_tint1_g", 127)
-		colours.Tint1.z = LocalPlayer():GetInfoNum("cl_drc_tint1_b", 127)
+		colours.Tint1.x = DRC.LocalPlayer:GetInfoNum("cl_drc_tint1_r", 127)
+		colours.Tint1.y = DRC.LocalPlayer:GetInfoNum("cl_drc_tint1_g", 127)
+		colours.Tint1.z = DRC.LocalPlayer:GetInfoNum("cl_drc_tint1_b", 127)
 	
-		colours.Tint2.x = LocalPlayer():GetInfoNum("cl_drc_tint2_r", 127)
-		colours.Tint2.y = LocalPlayer():GetInfoNum("cl_drc_tint2_g", 127)
-		colours.Tint2.z = LocalPlayer():GetInfoNum("cl_drc_tint2_b", 127)
+		colours.Tint2.x = DRC.LocalPlayer:GetInfoNum("cl_drc_tint2_r", 127)
+		colours.Tint2.y = DRC.LocalPlayer:GetInfoNum("cl_drc_tint2_g", 127)
+		colours.Tint2.z = DRC.LocalPlayer:GetInfoNum("cl_drc_tint2_b", 127)
 	
-		colours.Eye.x = LocalPlayer():GetInfoNum("cl_drc_eyecolour_r", 127)
-		colours.Eye.y = LocalPlayer():GetInfoNum("cl_drc_eyecolour_g", 127)
-		colours.Eye.z = LocalPlayer():GetInfoNum("cl_drc_eyecolour_b", 127)
+		colours.Eye.x = DRC.LocalPlayer:GetInfoNum("cl_drc_eyecolour_r", 127)
+		colours.Eye.y = DRC.LocalPlayer:GetInfoNum("cl_drc_eyecolour_g", 127)
+		colours.Eye.z = DRC.LocalPlayer:GetInfoNum("cl_drc_eyecolour_b", 127)
 		
-		colours.Energy.x = LocalPlayer():GetInfoNum("cl_drc_energycolour_r", 127)
-		colours.Energy.y = LocalPlayer():GetInfoNum("cl_drc_energycolour_g", 127)
-		colours.Energy.z = LocalPlayer():GetInfoNum("cl_drc_energycolour_b", 127)
+		colours.Energy.x = DRC.LocalPlayer:GetInfoNum("cl_drc_energycolour_r", 127)
+		colours.Energy.y = DRC.LocalPlayer:GetInfoNum("cl_drc_energycolour_g", 127)
+		colours.Energy.z = DRC.LocalPlayer:GetInfoNum("cl_drc_energycolour_b", 127)
 		
 		local vals = {
 			["Colours"] = colours,
@@ -2231,17 +2286,6 @@ function DRCMenu(ply)
 	
 	MakeHint(t2tab1, 495, 80, "Forces Draconic-Enabled materials to use a fallback cubemap, as AMD cards frequently have maps' envmaps become missing textures.\n\n[ WARNING ] Enabling this is a one-way ticket until you reload, due to limitations of the Source engine.\nAfter the envmap has been changed from a dynamic one, it cannot be changed back.\nIf you are not using an AMD GPU and just messing with settings, leave this OFF.")
 	
-	--[[
-	local DRCSway = vgui.Create( "DCheckBoxLabel", t2tab1 )
-	DRCSway:SetPos(516, 100)
-	DRCSway:SetSize(500, 20)
-	DRCSway:SetText( "I get motion sickness easily" )
-	DRCSway:SetConVar( "cl_drc_sway" )
-	DRCSway.Label:SetDark(true)
-	DRCSway:SetEnabled(true)
-	
-	MakeHint(t2tab1, 495, 100, "- Turns off scipted bob/sway on Draconic SWEPs") ]]
-	
 	local SettingsTitle_CL = vgui.Create( "DLabel", t2tab1)
 	SettingsTitle_CL:SetText("Client Settings")
 	SettingsTitle_CL:SetSize(200, 50)
@@ -2259,7 +2303,7 @@ function DRCMenu(ply)
 	SettingsSubTitle_CL:SetContentAlignment(0)
 	
 	local DisclaimerSettings = vgui.Create( "DLabel", t2tab1)
-	DisclaimerSettings:SetPos(20, 600)
+	DisclaimerSettings:SetPos(20, 400)
 	DisclaimerSettings:SetSize(w2, 20)
 	DisclaimerSettings:SetText("* Some settings & preferences can be overridden by server settings.")
 	DisclaimerSettings:SetColor(TextCol)
@@ -2388,13 +2432,64 @@ function DRCMenu(ply)
 	local VMOZ = vgui.Create( "DNumSlider", t2tab1 )
 	VMOZ:SetPos(25, 280)
 	VMOZ:SetSize(300, 20)
-	VMOZ:SetText( "Global viewmodel offset Y" )
+	VMOZ:SetText( "Global viewmodel offset Z" )
 	VMOZ.Label:SetDark(true)
 	VMOZ:SetMin( -10 )
 	VMOZ:SetMax( 10 )
 	VMOZ:SetDecimals( 4 )
 	VMOZ:SetConVar( "cl_drc_vmoffset_z" )
 	VMOZ:SetEnabled(true)
+	
+	t2tab1.PerformanceTitle = vgui.Create( "DLabel", t2tab1)
+	t2tab1.PerformanceTitle:SetText("Performance")
+	t2tab1.PerformanceTitle:SetSize(200, 50)
+	t2tab1.PerformanceTitle:SetPos(500, 200)
+	t2tab1.PerformanceTitle:SetColor(Color(255, 255, 255, 255))
+	t2tab1.PerformanceTitle:SetFont("DermaLarge")
+	t2tab1.PerformanceTitle:SetContentAlignment(0)
+	
+	t2tab1.AggressiveCullingMul = vgui.Create( "DNumSlider", t2tab1 )
+	t2tab1.AggressiveCullingMul:SetMin( 0.1 )
+	t2tab1.AggressiveCullingMul:SetMax( 5 )
+	t2tab1.AggressiveCullingMul:SetPos(516, 250)
+	t2tab1.AggressiveCullingMul:SetSize(300, 20)
+	t2tab1.AggressiveCullingMul:SetText( "Agg. Cull Min Distance" )
+	t2tab1.AggressiveCullingMul:SetConVar( "cl_drc_perf_aggressiveculling_mindist" )
+	t2tab1.AggressiveCullingMul.Label:SetDark(true)
+	t2tab1.AggressiveCullingMul:SetEnabled(true)
+	
+	MakeHint(t2tab1, 495, 250, "Multiplier. Alters the minimum distance for Draconic's ''agressive culling'' to function. Below this distance it instead uses default engine behaviour.")
+	
+	
+	t2tab1.AggressiveCulling = vgui.Create( "DCheckBoxLabel", t2tab1 )
+	t2tab1.AggressiveCulling:SetPos(516, 280)
+	t2tab1.AggressiveCulling:SetSize(500, 20)
+	t2tab1.AggressiveCulling:SetText( "Use aggressive render culling on Draconic SWEPs" )
+	t2tab1.AggressiveCulling:SetConVar( "cl_drc_perf_aggressiveculling_weapons" )
+	t2tab1.AggressiveCulling.Label:SetDark(true)
+	t2tab1.AggressiveCulling:SetEnabled(true)
+	
+	MakeHint(t2tab1, 495, 280, "- Weapons will check for direct world obstruction.\n- Very distant weapons will not render.\n- Weapons very close behave normally.\n\nCan increase your FPS on poorly optimized maps with a lot of weapons active.")
+	
+	t2tab1.AggressiveCullPlayers = vgui.Create( "DCheckBoxLabel", t2tab1 )
+	t2tab1.AggressiveCullPlayers:SetPos(516, 300)
+	t2tab1.AggressiveCullPlayers:SetSize(500, 20)
+	t2tab1.AggressiveCullPlayers:SetText( "Use aggressive render culling on players" )
+	t2tab1.AggressiveCullPlayers:SetConVar( "cl_drc_perf_aggressiveculling_players" )
+	t2tab1.AggressiveCullPlayers.Label:SetDark(true)
+	t2tab1.AggressiveCullPlayers:SetEnabled(true)
+	
+	MakeHint(t2tab1, 495, 300, "Enable aggressive culling for playermodels. This has a doubled cutoff distance compared to weapons.\n\nCan increase your FPS in mulltiplayer where there are a lot of players present using high-end playermodels.\nNo guarantee of addon compatibility.\n\n(expect some pop-in using this, and be aware that in very niche cases may derender players you should otherwise see.)")
+	
+	t2tab1.AggressiveCullMisc = vgui.Create( "DCheckBoxLabel", t2tab1 )
+	t2tab1.AggressiveCullMisc:SetPos(516, 320)
+	t2tab1.AggressiveCullMisc:SetSize(500, 20)
+	t2tab1.AggressiveCullMisc:SetText( "Use miscellaneous aggressive render culling" )
+	t2tab1.AggressiveCullMisc:SetConVar( "cl_drc_perf_aggressiveculling_misc" )
+	t2tab1.AggressiveCullMisc.Label:SetDark(true)
+	t2tab1.AggressiveCullMisc:SetEnabled(true)
+	
+	MakeHint(t2tab1, 495, 320, "''Miscellaneous'' aggressive culling. This covers everything hit by the ''Aggressive Culling'' toolgun. If you are running into visibility problems or are on an actual supercomputer feel free to disable this.")
 	
 	t2tab1.ResetToDefault = vgui.Create("DButton", t2tab1)
 	t2tab1.ResetToDefault:SetPos(20, 600)
@@ -2515,7 +2610,7 @@ function DRCMenu(ply)
 	HL2Diff:AddChoice("Medium", 2)
 	HL2Diff:AddChoice("Hard", 3)
 	function HL2Diff:OnSelect(index, value, data)
-		LocalPlayer():ConCommand("skill ".. index .."")
+		DRC.LocalPlayer:ConCommand("skill ".. index .."")
 	end
 	
 	local textE = "''Easy'': ".. GetConVarNumber("sk_dmg_inflict_scale1") * 100 .."% damage dealt, ".. GetConVarNumber("sk_dmg_take_scale1") * 100 .."% damage taken."
@@ -2540,7 +2635,7 @@ function DRCMenu(ply)
 	t2tab2.InfiniteAmmo:AddChoice("Enabled", 1)
 	t2tab2.InfiniteAmmo:AddChoice("Bottomless Mag", 2)
 	function t2tab2.InfiniteAmmo:OnSelect(index, value, data)
-		LocalPlayer():ConCommand("sv_drc_infiniteammo ".. index - 1 .."")
+		DRC.LocalPlayer:ConCommand("sv_drc_infiniteammo ".. index - 1 .."")
 	end
 	
 	MakeHint(t2tab2, 378, 52, "''Enabled'': Weapons need to be reloaded, weapons will overheat; but won't take ammo from your pool.\n\n''Bottomless Mag'': Ammo never depletes, weapons will never overheat.")
@@ -2560,7 +2655,7 @@ function DRCMenu(ply)
 	t2tab2.SprintDropdown:AddChoice("Force Passives", 1)
 	t2tab2.SprintDropdown:AddChoice("Disable Passives", 2)
 	function t2tab2.SprintDropdown:OnSelect(index, value, data)
-		LocalPlayer():ConCommand("sv_drc_force_sprint ".. index - 1 .."")
+		DRC.LocalPlayer:ConCommand("sv_drc_force_sprint ".. index - 1 .."")
 	end
 	
 	MakeHint(t2tab2, 378, 87, "''SWEP Default'': Passive sprinting will be based on the weapon's settings.\n\n''Force Passives'': Passive sprinting will be forced on all DRC SWEPs.\n\n''Disable Passives'': Passive sprinting will be DISABLED on all DRC SWEPs.")
@@ -2898,6 +2993,7 @@ function DRCMenu(ply)
 	DebugInfo:SetText("Compiled for: ".. versionname .." (BSP V".. DRC.MapInfo.Version ..")\nNumber of Envmaps: ".. #drc_cubesamples .."")
 	DebugInfo:SetColor(TextCol)
 	
+	
 	local DebugInfo = vgui.Create( "DLabel", t4tab1)
 	ControlsTitle:SetFont("DermaLarge")
 	DebugInfo:SetPos(25, 10)
@@ -2916,7 +3012,7 @@ function DRCMenu(ply)
 	
 	local convars = {
 		["mat_hdr_level"] = {					1, "HDR Mode", 2, false, "mat_hdr_level\n(Recommended: 2)\n\n0: LDR\n1: LDR + Bloom\n2: HDR"},
-		["mat_dxlevel"] = {						2, "DirectX Level", 95, false, "mat_dxlevel\n(Recommended: 95)\nDirectX modes:\n- 80: DX8\n- 81: DX8.1\n- 90: DX9 (Shader Model 2)\n- 95: DX9 (Shader Model 3)\n- 98: DX9 (Xbox 360 comaptibility; DO NOT USE. Runs worse on PC)\n- 100: DX10 (Unknown level of stability)"},
+		["mat_dxlevel"] = {						2, "DirectX Level", 95, false, "mat_dxlevel\n(Recommended: 95)\nDirectX modes:\n- 80: DX8\n- 81: DX8.1\n- 90: DX9 (Shader Model 2)\n- 95: DX9 (Shader Model 3)\n- 98: DX9 (Xbox 360 comaptibility; DO NOT USE. Runs worse on PC)"},
 		["r_radiosity"] = {						3, "Radiosity Mode", 3, 3, "r_radiosity\n(Recommended: 3)\nAmbient lighting mode.\n\n0: No ambient lighting\n1: Cheap ambient lighting\n2: Raycasted indirect ambient lighting on everything (accurate, but slow with a lot of lights.)\n3: Raycast on static props, cheap on everything else (slightly inaccurate, but runs well)\n4: Raycast on static props, faked lighting on everything else (highly inaccurate, overbright)."},
 		["r_ambientmin"] = {					4, "Ambient Minimum", 0, 0, "r_ambientmin\n(Recommended: 0)\nDefaulted at 0.3, this value will make some dynamic entities inconsistently overbright in darker spaces.\n\nI suspect this is an oversight/bug with Garry's Mod's weird shaders."},
 		["mat_picmip"] = {						5, "PicMip", nil, false, "mat_picmip\n-10 to 20\nControls texture resolution display & mipmap fade distance. -10 displays the highest resolution available at all times."},
@@ -2935,17 +3031,17 @@ function DRCMenu(ply)
 		["mat_specular"] = {					18, "Cubemap Reflections", 1, false, "mat_specular\n(Recommended: 1)\nSetting this to 0 does not 'fix' anything, and in some cases can actually break some assets from rendering as intended."},
 		["mat_motion_blur_enabled"] = {			19, "Motion Blur", 1, false, "mat_motion_blur_enabled\nSet this to 1.\nIf you want to turn off engine motion blur, set mat_motion_blur_strength to 0.\nTurning it off outright will break a lot of effects for both games & addons which utilize the 4 different types of blur for various effects."},
 		["dsp_enhance_stereo"] = {				20, "Dynamic Sound Processing", 1, false, "dsp_enhance_stereo\nSet this to 1.\nEnables the game to perform digital sound processing effects based on 3d space instead of from a flat filter."},
-		["snd_mix_async"] = {					21, "Asynchronous Sounds", 0, false, "snd_mix_async\nSet this to 0.\nBackport from newer engine branches, does not support DSP & breaks it, creating monotone audio output.\nShould not be used."},
+--		["snd_mix_async"] = {					21, "Asynchronous Sounds", 0, false, "snd_mix_async\nSet this to 0.\nBackport from newer engine branches, does not support DSP & breaks it, creating monotone audio output.\nShould not be used."},
 --		["snd_mixahead"] = {					22, "Asynchronous Mix Time", 0.1, false, "snd_mixahead\nLeave this at its default of 0.1.\nAmount of time (0.1 = 100ms) to dedicate to mixing asynchronous audio.\nSet this too low and audio begins to break, set it too high and audio goes back to synchronous processing."},
-		["gmod_mcore_test"] = {					22, "Gmod Multicore", 1, false, "gmod_mcore_test\n0 or 1 (Recommended: 1)\nEnable multicore processing, providing a significant performance increase most of the time."},
-		["cl_threaded_bone_setup"] = {			23, "Threaded Bones", 1, false, "cl_threaded_bone_setup\n0 or 1 (Recommended: 1)\nEnable multithreaded processing of gmod-lua bone transformations."},
+		["gmod_mcore_test"] = {					21, "Gmod Multicore", 1, false, "gmod_mcore_test\n0 or 1 (Recommended: 1)\nEnable multicore processing, providing a significant performance increase most of the time."},
+		["cl_threaded_bone_setup"] = {			22, "Threaded Bones", 1, false, "cl_threaded_bone_setup\n0 or 1 (Recommended: 1)\nEnable multithreaded processing of gmod-lua bone transformations."},
 --		["cl_threaded_client_leaf_system"] = {	24, "Threaded VisLeafs", 1, false, "cl_threaded_client_leaf_system\n0 or 1 (Recommended: 1)\nEnable multithreaded processing of visleaf-related computations."},
-		["mat_queue_mode"] = {					24, "Threaded Materials", 1, false, "mat_queue_mode\n-1, 0, 1, or 2 (Recommended: 2)\nEnables the following:\n- Multithreaded processing of materials with engine-programming effects such as material proxies.\n- Enables materials being cached for the fist time to be done on multiple threads.\n\n-1: Automatic detection (unreliable)\n0: Synchronus single thread\n1: Single-threaded computation\n2: Multithreaded computation"},
-		["r_threaded_particles"] = {			25, "Threaded Particles", 1, false, "r_threaded_particles\n-1, 0 or 1 (Recommended: 1)\nEnable multithreaded processing of particle computations."},
+		["mat_queue_mode"] = {					23, "Threaded Materials", 1, false, "mat_queue_mode\n-1, 0, 1, or 2 (Recommended: 2)\nEnables the following:\n- Multithreaded processing of materials with engine-programming effects such as material proxies.\n- Enables materials being cached for the fist time to be done on multiple threads.\n\n-1: Automatic detection (unreliable)\n0: Synchronus single thread\n1: Single-threaded computation\n2: Multithreaded computation"},
+		["r_threaded_particles"] = {			24, "Threaded Particles", 1, false, "r_threaded_particles\n-1, 0 or 1 (Recommended: 1)\nEnable multithreaded processing of particle computations."},
 --		["r_threaded_client_shadow_manager"] = {27, "Threaded Shadows", 1, false, "r_threaded_client_shadow_manager\n-1, 0 or 1 (Recommended: 1)\nNobody seems to know fully what this does, best guesses are that it's a leftover from old-engine,\nas it has nothing tied to it in SDK 2013+. Everyone turns it to 1 just to be safe with no adverse effect."},
 --		["r_threaded_renderables"] = {			28, "Threaded Renderables", 1, false, "r_threaded_renderables\n-1, 0 or 1 (Recommended: 1)\nFrom mastercomfig's TF2 configs: ''Asynchronously set up bones on animated entities''."},
-		["r_queued_ropes"] = {					26, "Materialized Ropes", 1, false, "r_queued_ropes\n-1, 0 or 1 (Recommended: 1)\nWhen set to 1, this will make the engine treat ropes as materials, offloading their rendering operations to the GPU instead of the CPU."},
-		["r_occludermincount"] = {				27, "Minimum Occluders", 1, false, "r_occludermincount\n0 to ??? (Recommended: 1)\nForces the game to always have at least one occlusion cull, preventing stuff from being drawn that otherwise shouldn't be when off-screen."},
+		["r_queued_ropes"] = {					25, "Materialized Ropes", 1, false, "r_queued_ropes\n-1, 0 or 1 (Recommended: 1)\nWhen set to 1, this will make the engine treat ropes as materials, offloading their rendering operations to the GPU instead of the CPU."},
+		["r_occludermincount"] = {				26, "Minimum Occluders", 1, false, "r_occludermincount\n0 to ??? (Recommended: 1)\nForces the game to always have at least one occlusion cull, preventing stuff from being drawn that otherwise shouldn't be when off-screen."},
 	}
 	
 	for k,v in pairs(convars) do
@@ -2989,11 +3085,11 @@ function DRCMenu(ply)
 	t4tab1.copy:SetSize(200, 20)
 	t4tab1.copy:SetText("Copy optimal configs to clipboard")
 	t4tab1.copy.DoClick = function()
-		SetClipboardText("r_radiosity 3\nr_ambientmin 0\nr_shadows 1\nr_flashlightdepthres 8192\nr_flashlightdepthtexture 1\nr_projectedtexture_filter 0.1\nr_shadow_allowdynamic 1\nr_shadow_allowbelow 1\nmat_specular 1\nmat_motion_blur_enabled 1\nmat_motion_blur_strength 0\ndsp_enhance_stereo 1\nsnd_mix_async 0\ngmod_mcore_test 1\ncl_threaded_bone_setup 1\nmat_queue_mode 2\nr_threaded_particles 1\nr_queued_ropes 1\nr_occludermincount 1")
+		SetClipboardText("r_radiosity 3\nr_ambientmin 0\nr_shadows 1\nr_flashlightdepthres 8192\nr_flashlightdepthtexture 1\nr_projectedtexture_filter 0.1\nr_shadow_allowdynamic 1\nr_shadow_allowbelow 1\nmat_specular 1\nmat_motion_blur_enabled 1\nmat_motion_blur_strength 0\ndsp_enhance_stereo 1\ngmod_mcore_test 1\ncl_threaded_bone_setup 1\nmat_queue_mode 2\nr_threaded_particles 1\nr_queued_ropes 1\nr_occludermincount 1")
 	end
 
 --[[	
-	local col = render.GetLightColor(LocalPlayer():EyePos()) * 255
+	local col = render.GetLightColor(DRC.LocalPlayer:EyePos()) * 255
 	local DebugInfo = vgui.Create( "DLabel", t4tab1)
 	DebugInfo:SetPos(25, 40)
 	DebugInfo:SetSize(300, 20)
@@ -3078,7 +3174,7 @@ function DRCMenu(ply)
 	t4tab2panel_left.Tracelines.Label:SetDark(true)
 	t4tab2panel_left.Tracelines:SetEnabled(true)
 	
-	MakeHint(t4tab2panel_left, 150, 135, "Renders TraceLines used by the Draconic Base.\nServer-sided traces will only render in singleplayer.\n\nWhite = Undefined/generic\nRed = Harmful hit connection\nYellow = DRC:TraceDir() trace.\nBlue = DRC:FloorDist() trace.")
+	MakeHint(t4tab2panel_left, 150, 135, "Renders TraceLines used by the Draconic Base.\nServer-sided traces will only render in singleplayer.\n\nWhen originating from the base itself, the colours mean:\nWhite = Undefined/generic\nRed = Harmful hit connection\nYellow = DRC:TraceDir() trace.\nBlue = DRC:FloorDist() trace.\nGreen = Aggressive culling trace.")
 	
 	t4tab2panel_left.Lights = vgui.Create( "DCheckBoxLabel", t4tab2panel_left )
 	t4tab2panel_left.Lights:SetPos(25, 155)
@@ -3206,7 +3302,7 @@ function DRCMenu(ply)
 		RunConsoleCommand("cl_drc_debug_crosshairmode", index - 1)
 	end
 	
-	if LocalPlayer():IsAdmin() then
+	if DRC.LocalPlayer:IsAdmin() then
 		local t4tab2panel_right = vgui.Create("DPanel", t4tab2)
 		t4tab2panel_right:Dock(RIGHT)
 		t4tab2panel_right:SetSize(320)
@@ -3223,20 +3319,20 @@ function DRCMenu(ply)
 		DevTitle:SetContentAlignment(4)
 		
 		local function FadeWhite()
-			LocalPlayer():ScreenFade(SCREENFADE.IN, Color(255, 255, 255), 3, 0)
+			DRC.LocalPlayer:ScreenFade(SCREENFADE.IN, Color(255, 255, 255), 3, 0)
 		end
 		
 		local function Yeet()
 		--	surface.PlaySound("")
 			net.Start("DRC_Nuke")
-			net.WriteEntity(LocalPlayer())
+			net.WriteEntity(DRC.LocalPlayer)
 			net.SendToServer()
 		end
 		
 		local function SoftYeet()
 		--	surface.PlaySound("draconic/NOW.ogg")
 			net.Start("DRC_KYS")
-			net.WriteEntity(LocalPlayer())
+			net.WriteEntity(DRC.LocalPlayer)
 			net.SendToServer()
 		end
 		
@@ -3259,7 +3355,7 @@ function DRCMenu(ply)
 		end
 		
 		local function SpawnThatShit()
-			LocalPlayer():ConCommand("drc_debug_spawnweaponmodel")
+			DRC.LocalPlayer:ConCommand("drc_debug_spawnweaponmodel")
 		end
 		
 		if game.SinglePlayer() then

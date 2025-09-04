@@ -4,6 +4,7 @@ if ( CLIENT ) then
 	language.Add( "tool.drc_colour.reload", "Reset colour" )
 	language.Add( "tool.drc_colour.left", "Apply colour" )
 	language.Add( "tool.drc_colour.right", "Copy colour" )
+	DRC:RegisterToolGunTips("drc_colour", "Set colours", "Copy colours", "Reset colours")
 end
 
 TOOL.Category = "Render"
@@ -190,6 +191,22 @@ function TOOL:Reload( trace )
 	SetColour( self:GetOwner(), ent, {col, "accent2"})
 	SetColour( self:GetOwner(), ent, {0, "grunge"})
 	return true
+end
+
+function TOOL:Think()
+	local tr = self:GetOwner():GetEyeTraceNoCursor()
+	local ent = tr.Entity
+	if !IsValid(ent) then self.PrimaryValid = false self.SecondaryValid = false self.ReloadValid = false return end
+	
+	if ent:IsWorld() then
+		self.PrimaryValid = false
+		self.SecondaryValid = false
+		self.ReloadValid = false
+	else
+		self.PrimaryValid = true
+		self.SecondaryValid = true
+		self.ReloadValid = true
+	end
 end
 
 local ConVarsDefault = TOOL:BuildConVarList()

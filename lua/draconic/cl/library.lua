@@ -9,6 +9,16 @@
 
 
 
+DRC.LocalPlayer = LocalPlayer()
+timer.Create("DRC_RefreshLocalPlayer", 0.1, 0, function()
+	local ply = LocalPlayer()
+	if IsValid(ply) and (!IsValid(DRC.LocalPlayer) or DRC.LocalPlayer != ply) then
+		DRC.LocalPlayer = ply
+	end
+end)
+
+
+
 -- ###Library
 DRC.Menu = {}
 DRC.CurrentRPModelOptions = {}
@@ -173,6 +183,7 @@ hook.Add("Think", "drc_CSThinkStuff", function()
 	local etr = util.TraceLine({
 		start = ply:GetShootPos(),
 		endpos = ply:GetShootPos() + ply:EyeAngles():Forward() * 10000,
+		mask = MASK_SHOT_PORTAL,
 		filter = function(ent) if ent != ply then return true end end
 	})
 	
@@ -187,7 +198,9 @@ hook.Add("Think", "drc_CSThinkStuff", function()
 		["gamer"] = Color(TimedSin(2.75, 127, 255, 0), TimedSin(1.83, 127, 255, 0), TimedSin(0.916, 127, 255, 0), 255),
 	}
 	
-	if CurTime() > CSModelCheck then
+	local rt, ct = RealTime(), CurTime()
+	
+	if rt > CSModelCheck then
 		CSModelCheck = CurTime() + 5
 		for k,v in pairs(ents.FindByClass("drc_csplayermodel")) do
 			if v:GetClass() == "drc_csplayermodel" && v != DRC.CSPlayerModel then v:Remove() end
@@ -195,23 +208,25 @@ hook.Add("Think", "drc_CSThinkStuff", function()
 	end
 	
 	-- It was either do this or network something every time an entity takes damage. So yeah...
-	if CurTime() > CSShieldModelCheck then
+	if rt > CSShieldModelCheck then
 	--	if !IsValid(DRC.CSPlayerHandShield) then
 	--		local hands = ply:GetHands()
 	--		DRC.CSPlayerHandShield = ents.CreateClientside("drc_shieldmodel")
 	--	end
-		CSShieldModelCheck = CurTime() + 5
+		CSShieldModelCheck = rt + 5
 		for k,v in pairs(ents.GetAll()) do
-			local shp, smhp, sent = DRC:GetShield(v)
-			if smhp != 0 && !IsValid(sent) then
-				local shield = ents.CreateClientside("drc_shieldmodel")
-				shield.FollowEnt = v
-				shield:Spawn()
+			if IsValid(v) then
+				local shp, smhp, sent = DRC:GetShield(v)
+				if smhp != 0 && !IsValid(sent) then
+					local shield = ents.CreateClientside("drc_shieldmodel")
+					shield.FollowEnt = v
+					shield:Spawn()
+				end
 			end
 		end
 	end
 	
-	if CurTime() > MBlurCheck then -- https://github.com/Facepunch/garrysmod-requests/issues/2110
+	if rt > MBlurCheck then -- https://github.com/Facepunch/garrysmod-requests/issues/2110
 		MBlurCheck = MBlurCheck + 1
 		if GetConVar("mat_motion_blur_enabled"):GetInt() < 1 then
 			print("Disabling motion blur will break addons' effects. Setting mat_motion_blur_strength to 0 instead...")
@@ -224,6 +239,200 @@ hook.Add("Think", "drc_CSThinkStuff", function()
 		end
 	end
 end)
+
+function DRC:AggressiveCull(obj, hardmul, cutoffmul)
+	if !IsValid(obj) then DRC.AggressiveCulls[obj] = nil return end
+	if !hardmul then hardmul = 1 end
+	if !cutoffmul then cutoffmul = 1 end
+	local lply = LocalPlayer()
+	if obj == lply then return false end
+	local spos = obj:GetPos()
+	local ppos = lply:EyePos()
+	local dist = spos:DistToSqr(ppos)
+	local zoom = DRC.AggCullFOVCheck
+	local mul = GetConVar("cl_drc_perf_aggressiveculling_mindist"):GetFloat()
+	
+	local initialvalid = dist > 100000*mul*hardmul
+	if !initialvalid then return false end
+	
+	if !zoom && dist > 10000000 * cutoffmul then return true end
+	if initialvalid then
+		local cv = lply:Crouching()
+		local z = 15
+		if cv && !lply:OnGround() then z = 25 end
+		local off = Vector(0,0,z)
+		
+		if obj:IsWeapon() && IsValid(obj.Owner) then spos = spos+Vector(0,0,20) else spos = spos+Vector(0,0,10) end
+		local dir = ((ppos-lply:OBBCenter()+off)-spos):GetNormalized()
+		local tr = util.QuickTrace(spos, dir * 999999999, function(ent) if ent == lply or ent:IsWorld() then return true else return false end end) 
+		DRC:RenderTrace(tr, Color(0, 255, 0, 255), RealFrameTime()*2)
+		if tr.Hit && tr.Entity != lply then return true end
+		return false
+	end
+	return false
+end
+
+net.Receive("DRC_SyncAggCull", function()
+	local ent = net.ReadEntity()
+	local b = net.ReadBool()
+	
+	if b == true then DRC.AggressiveCulls[ent] = ent else DRC.AggressiveCulls[ent] = nil end
+	if b == false then ent:SetNoDraw(b) end
+end)
+
+local function ReadBytes(str, pos, n)
+	local t = {str:byte(pos, pos + n - 1)}
+	local value = 0
+	for i = 1, n do
+		value = value * 256 + t[i]
+	end
+	return value, pos + n
+end
+
+local function ReadVLQ(str, pos)
+	local result, byte = 0, 0
+	repeat
+		byte = str:byte(pos)
+		result = bit.bor(bit.lshift(result, 7), bit.band(byte, 0x7F))
+		pos = pos + 1
+	until byte < 0x80
+	return result, pos
+end
+
+function DRC:PlayMidiNote(trackinfo, noteinfo)
+	local vol, pitch, pan = noteinfo[2]/127, noteinfo[1]/127*255 * trackinfo.PitchOffset, noteinfo[3]/127
+--	print("[DRC] Playing midi note: ")
+--	print("Instrument: ", trackinfo.Instrument)
+--	print("Volume: ", vol, "| Pitch: ", pitch, "| Pan: ", pan)
+	EmitSound(trackinfo.Instrument, LocalPlayer():EyePos(), LocalPlayer():EntIndex(), CHAN_AUTO, vol, 75, 0, pitch)
+end
+
+function DRC:TestPlayMidi(midi)
+	for k,v in pairs(midi.Tracks) do
+		for ke,va in pairs(v) do
+			if ke == "Notes" then
+				for key,val in pairs(va) do
+				timer.Simple(key, function() DRC:PlayMidiNote(v, val) end)
+				end
+			end
+		end
+	end
+end
+
+function DRC:SetInstrument(midi, track, snd, pitchoffset)
+	if !midi then return end
+	midi.Tracks[track].Instrument = snd
+	midi.Tracks[track].PitchOffset = pitchoffset or 1
+end
+
+function DRC:SetInstrumentLooping(midi, track, b)
+	if !midi then return end
+	midi.Tracks[track].Looping = b or false
+end
+
+function DRC:ReadMidi(name, fyle)
+	local raw = file.Read(fyle, "THIRDPARTY")
+
+	local pos = 1
+	local header = raw:sub(pos, pos + 3)
+	if header != "MThd" then
+		print("Invalid MIDI header!")
+		return
+	end
+	pos = pos + 4
+
+	local headerLength, format, numTracks, division
+	headerLength, pos = ReadBytes(raw, pos, 4)
+	format, pos = ReadBytes(raw, pos, 2)
+	numTracks, pos = ReadBytes(raw, pos, 2)
+	division, pos = ReadBytes(raw, pos, 2)
+
+	local ppqn = division
+	local tempo = 500000
+
+	local song = {
+		Name = name,
+		Tracks = {}
+	}
+
+	for t = 0, numTracks - 1 do
+		local chunk = raw:sub(pos, pos + 3)
+		pos = pos + 4
+
+		if chunk != "MTrk" then
+			print("Expected MTrk but got:", chunk)
+			break
+		end
+
+		local length
+		length, pos = ReadBytes(raw, pos, 4)
+
+		local trackEnd = pos + length
+		local currentTimeTicks = 0
+		local currentInstrument = 0
+		local track = {
+			["Instrument"] = "",
+			["Volume"] = 1,
+			["VolumeTrack"] = t,
+			["Looping"] = false,
+			["PitchOffset"] = 1,
+			["Notes"] = {}
+		}
+
+		local lastStatus = nil
+		while pos < trackEnd do
+			local delta, newPos = ReadVLQ(raw, pos)
+			currentTimeTicks = currentTimeTicks + delta
+			pos = newPos
+
+			local status = raw:byte(pos)
+			if status < 0x80 then
+				status = lastStatus
+			else
+				pos = pos + 1
+				lastStatus = status
+			end
+
+			local eventType = bit.band(status, 0xF0)
+			local channel   = bit.band(status, 0x0F)
+
+			if eventType == 0x90 then
+				local note = raw:byte(pos)
+				local velocity = raw:byte(pos + 1)
+				pos = pos + 2
+				if velocity > 0 then
+					local seconds = (currentTimeTicks * tempo) / (ppqn * 1000000)
+					track.Notes[seconds] = {note, velocity, 64}
+				end
+			elseif eventType == 0x80 then
+				pos = pos + 2
+			elseif eventType == 0xB0 then
+				local controller = raw:byte(pos)
+				local value = raw:byte(pos + 1)
+				pos = pos + 2
+				if controller == 10 then end
+			elseif eventType == 0xC0 then
+				currentInstrument = raw:byte(pos)
+				pos = pos + 1
+			elseif status == 0xFF then
+				local metaType = raw:byte(pos)
+				local length, lenPos = ReadVLQ(raw, pos + 1)
+				pos = lenPos + length
+				if metaType == 0x51 then
+					local tempoBytes = {raw:byte(lenPos, lenPos + 2)}
+					tempo = tempoBytes[1] * 65536 + tempoBytes[2] * 256 + tempoBytes[3]
+				end
+			else
+				pos = pos + 2
+			end
+		end
+
+		song.Tracks[t] = track
+		pos = trackEnd
+	end
+
+	return song
+end
 
 
 
@@ -380,24 +589,31 @@ RunConsoleCommand("r_fogstart", fogstart)
 RunConsoleCommand("r_fogend", fogend)
 
 hook.Add("PlayerTick", "DRC_SpeakingPoseParam", function(ply)
-	if game.SinglePlayer() then return end
-	local vol = math.Clamp(ply:VoiceVolume(), 0.05, 1)
-	if ply.DesiredVoiceVal != nil then
-		ply.LerpedVoiceSmoother = Lerp(0.9, ply.LerpedVoiceSmoother or vol, vol)
-		ply.LerpedVoiceVal = Lerp(1 * ply.LerpedVoiceSmoother, ply.LerpedVoiceVal or ply.DesiredVoiceVal, ply.DesiredVoiceVal)
-	end
-	if ply.IsUsingVoice == true then
-		ply.DesiredVoiceVal = Lerp(0.5, ply.DesiredVoiceVal or vol * 3, vol * 3)
-	else
-		ply.DesiredVoiceVal = -0.05
-	end
-	if ply.LerpedVoiceVal then 
-		if ply:LookupPoseParameter("drc_speaking") != -1 then ply:SetPoseParameter("drc_speaking", ply.LerpedVoiceVal) end
+	if !game.SinglePlayer && ply:LookupPoseParameter("drc_speaking") != -1 then
+		local vol = math.Clamp(ply:VoiceVolume(), 0.05, 1)
+		if ply.DesiredVoiceVal != nil then
+			ply.LerpedVoiceSmoother = Lerp(0.9, ply.LerpedVoiceSmoother or vol, vol)
+			ply.LerpedVoiceVal = Lerp(1 * ply.LerpedVoiceSmoother, ply.LerpedVoiceVal or ply.DesiredVoiceVal, ply.DesiredVoiceVal)
+		end
+		if ply.IsUsingVoice == true then
+			ply.DesiredVoiceVal = Lerp(0.5, ply.DesiredVoiceVal or vol * 3, vol * 3)
+		else
+			ply.DesiredVoiceVal = -0.05
+		end
+		if ply.LerpedVoiceVal then ply:SetPoseParameter("drc_speaking", ply.LerpedVoiceVal) end
 	end
 end)
 
-hook.Add("PlayerStartVoice", "DRC_SpeakingPoseParam_MarkTrue", function(ply) if game.SinglePlayer() then return end ply.IsUsingVoice = true end)
-hook.Add("PlayerEndVoice", "DRC_SpeakingPoseParam_MarkFalse", function(ply) if game.SinglePlayer() then return end ply.IsUsingVoice = false end)
+hook.Add("PlayerStartVoice", "DRC_SpeakingPoseParam_MarkTrue", function(ply)
+	if game.SinglePlayer() then return end
+	ply.IsUsingVoice = true
+	if ply:LookupPoseParameter("drc_voicechatting") != -1 then ply:SetPoseParameter("drc_voicechatting", 1) end
+end)
+hook.Add("PlayerEndVoice", "DRC_SpeakingPoseParam_MarkFalse", function(ply)
+	if game.SinglePlayer() then return end 
+	ply.IsUsingVoice = false
+	if ply:LookupPoseParameter("drc_voicechatting") != -1 then ply:SetPoseParameter("drc_voicechatting", 0) end
+end)
 
 hook.Add("CreateClientsideRagdoll", "Draconic_FunnyPlayerCorpses_Client", function(ply, rag)
 	if GetConVar("sv_drc_funnyplayercorpses"):GetInt() == 1 && ply:IsPlayer() then
@@ -757,10 +973,7 @@ function DRC:IsDraconicThirdPersonEnabled(ply)
 	return false
 end
 
-net.Receive("DRC_NetworkScreenShake", function()
-	local pos, amp, freq, dur, radi = net.ReadVector(), net.ReadFloat(), net.ReadFloat(), net.ReadFloat(), net.ReadFloat()
-	
-	
+function DRC:FakeScreenShake(pos, amp, freq, dur, radi)	
 	for k,v in pairs(ents.FindInSphere(pos, radi)) do
 		if v == LocalPlayer() then
 			local dist = pos:Distance(LocalPlayer():GetPos() + LocalPlayer():OBBCenter())
@@ -770,17 +983,23 @@ net.Receive("DRC_NetworkScreenShake", function()
 			v.CalcViewTPShakeLastDur = dur
 		end
 	end
+end
+
+net.Receive("DRC_NetworkScreenShake", function()
+	local pos, amp, freq, dur, radi = net.ReadVector(), net.ReadFloat(), net.ReadFloat(), net.ReadFloat(), net.ReadFloat()
+	
+	DRC:FakeScreenShake(pos, amp, freq, dur, radi)
 end)
 
 local NegateTick = 0
 hook.Add("Think", "DRC_CalcViewShakeNegation", function()
-	if CurTime() < NegateTick then return end
+	if RealTime() < NegateTick then return end
 	if !LocalPlayer().CalcViewTPShakePower then LocalPlayer().CalcViewTPShakePower = 0 end
 	if !LocalPlayer().CalcViewTPShakeLastDur then LocalPlayer().CalcViewTPShakeLastDur = 0 end
 	local durval = LocalPlayer().CalcViewTPShakeLastDur
 	if durval >= 1 then durval = math.Clamp(LocalPlayer().CalcViewTPShakeLastDur/5, 0.01, 1) else durval = (1 - LocalPlayer().CalcViewTPShakeLastDur)/2.5 end
-	NegateTick = CurTime() + 0.1
-	LocalPlayer().CalcViewTPShakePower = math.Clamp(LocalPlayer().CalcViewTPShakePower - durval, 0.01, 1)
+	NegateTick = RealTime() + 0.1
+	LocalPlayer().CalcViewTPShakePower = math.Clamp(LocalPlayer().CalcViewTPShakePower - durval, 0, 1)
 end)
 
 function DRC:GetCalcViewShake()
@@ -834,7 +1053,7 @@ local function CalcViewChecks(ply)
 	if ThirdPersonModEnabled(ply) then return false end
 --	if game.IsDedicated() then return false end
 	if DRC.SV.drc_viewdrag != 1 then return false end
-	if ply:GetViewEntity() ~= ply then return false end
+	if ply:GetViewEntity() != ply then return false end
 	if ply:InVehicle() then return false end
 	
 	local wpn = ply:GetActiveWeapon()
@@ -1047,7 +1266,8 @@ function DRCSwepSway(wpn, vm, ogpos, ogang, pos, ang)
 						end
 					end
 					
-					local rft = FrameTime()
+					local rft = 0.002
+					local realft = RealFrameTime()
 					rollval_lerp = Lerp(rft*5, rollval_lerp or rollval, rollval)
 					drc_xval_lerp = Lerp(rft*10, drc_xval_lerp or xval, xval)
 					drc_yval_lerp = Lerp(rft*10, drc_yval_lerp or yval, yval)
@@ -1069,11 +1289,11 @@ function DRCSwepSway(wpn, vm, ogpos, ogang, pos, ang)
 					
 					local holdang = LocalPlayer():EyeAngles()
 					local inputang = Angle(DRC.MoveInfo.Mouse[2], -DRC.MoveInfo.Mouse[1], 0)*0.05
-					wpn.dang = LerpAngle((wpn.SS * 0.05), wpn.dang, inputang)--holdang - wpn.oang)
-					wpn.proxydang = LerpAngle((wpn.SS * 0.05), wpn.proxydang, inputang)
+					wpn.dang = LerpAngle((rft*200 * wpn.SS * 0.05), wpn.dang, inputang)--holdang - wpn.oang)
+					wpn.proxydang = LerpAngle((realft*200 * wpn.SS * 0.05), wpn.proxydang, inputang)
 					if RealTime() > wpn.LLTime + (FrameTime() * 0.001) then
 						wpn.LLTime = RealTime()
-						wpn.oang = LocalPlayer():EyeAngles()
+						wpn.oang = ogang
 						wpn.dang = wpn.dang * (1-wpn.SightInt)
 					end
 					
@@ -1101,6 +1321,7 @@ local lerppower = 7
 local bump, bumpang = Vector(), Vector()
 
 local function Bump(pos, ang, thyme)
+	if !game.SinglePlayer() then return end -- see next comment
 	bump = pos
 	bumpang = ang
 	timer.Simple(thyme * 0.05, function() bump = pos*0.8 bumpang = ang*0.8 end)
@@ -1125,7 +1346,9 @@ local handguns = { "pistol", "revolver" }
 local function GetBaseOffsets(wpn, setpos, setangle)
 	local ply = wpn:GetOwner()
 	local DrcGlobalVMOffset = Vector(GetConVar("cl_drc_vmoffset_x"):GetFloat(), GetConVar("cl_drc_vmoffset_y"):GetFloat(), GetConVar("cl_drc_vmoffset_z"):GetFloat())
-
+	
+	local ft, rft = FrameTime(), RealFrameTime()
+	
 	local offs = {
 		["null"] = {Vector(), Vector()},
 		["base"] = {wpn.VMPos, wpn.VMAng},
@@ -1144,9 +1367,8 @@ local function GetBaseOffsets(wpn, setpos, setangle)
 	local sprint = sk && mk && (wpn.DoesPassiveSprint == true or DRC.SV.drc_force_sprint == 1)
 	local passive = wpn:GetNWBool("Passive", false) && DRC.SV.drc_passives >= 1
 	local inspect = wpn:GetNWBool("Inspecting") && DRC.SV.drc_inspections >= 1
-	lerppower = FrameTime() * 7
+	lerppower = rft * 7
 	if DRC.SV.drc_force_sprint == 2 then sprint = false end
-	local sd = wpn.SightsDown
 	local mul2 = 1
 	if cv && !sd then offs.base = offs.crouch mul2=0.25 end
 	
@@ -1291,6 +1513,7 @@ function DRCSwepOffset(wpn, vm)
 	end
 	
 	local angpos
+	if !wpn.dynmove then wpn.dynmove = {["Ang"] = Angle(), ["Pos"] = Vector(), ["Roll"] = 0} end
 	if wpn.Sway_IsShouldered == true then
 		local mul = wpn.Sway_OffsetPowerPos
 		local x = wpn.dynmove.Ang.y*0.15 * -mul.x
@@ -1515,7 +1738,7 @@ concommand.Add("draconic_menu", function()
 	DRCMenu(LocalPlayer())
 end)
 
-local function ToggleThird()
+function DRC:ToggleThirdperson(soft)
 	local ply = LocalPlayer()
 	DRC.CalcView.ThirdPerson.LerpedFinalPos = ply:EyePos()
 	DRC.CalcView.ThirdPerson.Pos = ply:EyePos()
@@ -1524,19 +1747,17 @@ local function ToggleThird()
 	DRC.CalcView.ThirdPerson.DirectionalAng = ply:EyeAngles()
 	DRC:ThirdPerson_PokeLiveAngle(ply)
 	
-	if GetConVar("cl_drc_thirdperson"):GetFloat() == 0 then
-		RunConsoleCommand("cl_drc_thirdperson", 1)
-	else
-		RunConsoleCommand("cl_drc_thirdperson", 0)
+	if soft != true then
+		if GetConVar("cl_drc_thirdperson"):GetFloat() == 0 then
+			RunConsoleCommand("cl_drc_thirdperson", 1)
+		else
+			RunConsoleCommand("cl_drc_thirdperson", 0)
+		end
 	end
 end
 
 concommand.Add("draconic_thirdperson", function()
-	ToggleThird()
-end)
-
-concommand.Add("draconic_thirdperson_toggle", function()
-	ToggleThird()
+	DRC:ToggleThirdperson()
 end)
 
 concommand.Add("draconic_thirdperson_swapshoulder", function()
@@ -1557,6 +1778,7 @@ concommand.Add("draconic_firstperson_toggle", function()
 		RunConsoleCommand("cl_drc_experimental_fp", 1)
 	else
 		RunConsoleCommand("cl_drc_experimental_fp", 0)
+		DRC.DisableHardScreenshake = false
 	end
 end)
 
