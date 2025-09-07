@@ -79,12 +79,14 @@ DRC.ThirdPerson.DefaultSettings = {
 }
 
 local lastload = GetConVar("cl_drc_thirdperson_preset"):GetString()
-if lastload != "" && file.Find("draconic/thirdperson/".. lastload ..".json", "DATA") != nil then
+if lastload && lastload != "" && file.Find("draconic/thirdperson/".. lastload ..".json", "DATA") != nil then
 	local initialpreset = file.Read("draconic/thirdperson/".. lastload ..".json", "DATA")
-	local tbl = util.JSONToTable(initialpreset)
-	table.CopyFromTo(tbl, DRC.ThirdPerson.LoadedSettings)
-	table.CopyFromTo(tbl, DRC.ThirdPerson.EditorSettings)
-	DRC:UpdateThirdPersonEditorMenu()
+	if initialpreset then
+		local tbl = util.JSONToTable(initialpreset)
+		table.CopyFromTo(tbl, DRC.ThirdPerson.LoadedSettings)
+		table.CopyFromTo(tbl, DRC.ThirdPerson.EditorSettings)
+		DRC:UpdateThirdPersonEditorMenu()
+	end
 end
 
 function DRC:ThirdPerson_PokeLiveAngle(ply)
